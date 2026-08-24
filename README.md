@@ -48,7 +48,7 @@ The semantic behavior is intentionally concentrated in three files:
 
 1. `task.md` — the actual problem and success criteria.
 2. `Prometheus.md` — constructive-agent role.
-3. `Momus.MD` — adversarial-agent role.
+3. `Momus.md` — adversarial-agent role.
 
 Runtime behavior lives in:
 
@@ -90,7 +90,7 @@ my-project/
     ├── config.ini
     ├── task.md
     ├── Prometheus.md
-    ├── Momus.MD
+    ├── Momus.md
     ├── schema.json
     ├── run.sh
     └── check.sh
@@ -106,7 +106,7 @@ cd /path/to/my-project
 
 nano .codex-debate/task.md
 nano .codex-debate/Prometheus.md
-nano .codex-debate/Momus.MD
+nano .codex-debate/Momus.md
 
 .codex-debate/check.sh
 .codex-debate/run.sh
@@ -256,7 +256,7 @@ runs/
     ├── run_manifest.json
     ├── task.snapshot.md
     ├── Prometheus.snapshot.md
-    ├── Momus.snapshot.MD
+    ├── Momus.snapshot.md
     ├── config.snapshot.ini
     ├── schema.snapshot.json
     ├── responses/

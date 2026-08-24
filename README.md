@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="assets/Prometheus-Monus.png"
+       alt="Prometheus–Momus"
+       width="100%">
+</p>
+
 # Prometheus–Momus
 
 **Prometheus–Momus** is a small, auditable Linux/macOS harness for running two

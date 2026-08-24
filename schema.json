@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": [
+        "PROPOSE",
+        "COUNTER",
+        "ACCEPT"
+      ]
+    },
+    "critique": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "proposal": {
+      "type": "string"
+    },
+    "blocking_issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rationale": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "decision",
+    "critique",
+    "proposal",
+    "blocking_issues",
+    "rationale"
+  ],
+  "additionalProperties": false
+}

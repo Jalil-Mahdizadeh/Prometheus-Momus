@@ -1,0 +1,17 @@
+# Runtime
+RUN_STATUS.json
+LATEST_RUN.txt
+.debate.lock
+runs/*
+
+# Keep empty runs directory in distributions if desired
+!runs/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Local editor / OS
+.DS_Store
+*.swp
+*.swo

@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from runtime_isolation import IsolationManager
+
+
+@unittest.skipUnless(shutil.which("bwrap"), "bubblewrap is unavailable")
+class BubblewrapIsolationTest(unittest.TestCase):
+    def test_controller_state_and_other_agent_are_not_visible(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            state = project / "controller-state"
+            run = state / "run"
+            project.mkdir()
+            state.mkdir()
+            run.mkdir()
+            (state / "secret.txt").write_text("hidden", encoding="utf-8")
+            schema = root / "schema.json"
+            schema.write_text("{}", encoding="utf-8")
+            extra = root / "narrow-extra.txt"
+            extra.write_text("allowed", encoding="utf-8")
+
+            manager = IsolationManager(
+                enabled=True,
+                backend="bubblewrap",
+                project_root=project,
+                controller_state_root=state,
+                run_private_dir=run,
+                codex_executable=Path("/bin/true"),
+                extra_read_paths=(extra,),
+            )
+            agent = manager.prepare_agent("momus")
+            (agent / "visible.txt").write_text("visible", encoding="utf-8")
+            manager.prepare_agent("prometheus")
+            paths = manager.paths("momus", agent / "latest.json")
+            self.assertEqual(paths.project_root, "/workspace")
+            self.assertEqual(paths.output_file, "/agent/latest.json")
+
+            command, environment = manager.wrap(
+                agent_name="momus",
+                command=[
+                    "/bin/sh",
+                    "-c",
+                    "test ! -e /workspace/controller-state/secret.txt "
+                    "&& test -e /agent/visible.txt "
+                    "&& test ! -e /agent/../prometheus "
+                    f"&& test -r {extra}",
+                ],
+                schema_file=schema,
+                project_writable=False,
+            )
+            result = subprocess.run(
+                command,
+                env=environment,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=20,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,167 +1,197 @@
 # Configuration reference
 
-All runtime settings are in `config.ini`.
+All runtime settings are in `config.ini`. Paths are resolved relative to the
+directory containing that file.
+
+The bundled baseline is intentionally portable: it uses the harness directory
+as `project_root`, inherits the operator's model, reasoning, and web-search
+settings, keeps agents read-only, allows 2–6 counter-rounds, caps execution at
+16 model calls / 120 active minutes / 250,000 tokens, and requires human
+adjudication. Change these values deliberately for the target task.
 
 ## `[debate]`
 
 ### `min_counter_rounds`
 
-Number of completed `COUNTER` rounds required before either agent can
-legally accept the current candidate.
-
-A value of 3 means:
-
-```text
-Prometheus opening
-Momus blind analysis
-Momus COUNTER   #1
-Prometheus COUNTER  #2
-Momus COUNTER   #3
-acceptance now permitted
-```
+Completed `COUNTER` rounds required before either agent may return
+`ACCEPT`. The opening and blind analysis do not count.
 
 ### `max_counter_rounds`
 
-Hard cap on successful counter-rounds.
-
-If reached, the controller writes `NO_CONSENSUS.md`.
+Hard cap on committed counter-rounds. Reaching it publishes
+`NO_CONSENSUS.md`.
 
 ### `blind_second_agent`
 
-When true, Momus does not receive Prometheus's opening response during its
-independent pre-analysis.
+When true, Momus does not receive Prometheus's opening response. This setting
+requires outer isolation and `sandbox = read-only`, and fails closed if the
+boundary is unavailable. Enforced blind mode currently requires Linux and
+bubblewrap.
 
 ### `final_acceptance_audit`
 
-When true, a tentative ACCEPT triggers one additional falsification turn
-before consensus is recorded.
+Runs one more falsification turn after tentative agent acceptance.
 
 ### `max_protocol_repairs`
 
-Maximum automatic correction attempts for protocol-invalid responses such
-as premature acceptance or ACCEPT with blocking issues.
+Maximum correction calls for invalid decisions, premature acceptance, or an
+acceptance that violates the blocking-issue/evidence contract.
 
 ### `heartbeat_seconds`
 
-How frequently the controller prints a "still running" heartbeat.
+Progress-report interval while a Codex subprocess is active.
 
 ### `turn_timeout_minutes`
 
-Controller-side timeout for one Codex turn.
-
-`0` disables the timeout.
-
----
+Per-call timeout. `0` disables only this per-call limit; the total wall
+budget remains mandatory.
 
 ## `[codex]`
 
-### `model`
+### `model` and `reasoning_effort`
 
-Blank means inherit the user's Codex configuration.
-
-Set a model name only if you want the harness to pin it.
-
-### `reasoning_effort`
-
-Blank means inherit.
-
-Valid values depend on the selected model and Codex CLI release.
+Blank values inherit Codex configuration. Explicit values are passed on every
+new and resumed call.
 
 ### `web_search`
 
-Supported harness values:
-
-- `inherit`
-- `disabled`
-- `cached`
-- `indexed`
-- `live`
-
-The harness passes non-`inherit` values to Codex as a config override.
-Because Codex evolves, run `./check.sh` after CLI upgrades.
+Harness values are `inherit`, `disabled`, `cached`, `indexed`, and
+`live`. Non-inherit values are passed as a Codex config override.
 
 ### `sandbox`
 
-Default:
+One of `read-only`, `workspace-write`, or `danger-full-access`. This is
+the inner Codex tool policy; outer OS isolation still limits the visible host
+filesystem.
 
-```ini
-sandbox = read-only
-```
+Write-capable modes require blind mode to be off and all controller/semantic
+files to live outside `project_root`.
 
-The harness recognizes:
+### `skip_git_repo_check`, `ignore_user_config`, `ignore_rules`
 
-- `read-only`
-- `workspace-write`
-- `danger-full-access`
-
-Use the least privilege compatible with the task.
-
-### `skip_git_repo_check`
-
-Useful when the target is not a Git repository.
-
-### `ignore_user_config`
-
-Passes Codex's `--ignore-user-config`.
-
-Normally leave false.
-
-### `ignore_rules`
-
-Passes Codex's `--ignore-rules`.
-
-Normally leave false; project rules may be important.
-
----
+Direct Codex CLI controls. Project rules remain enabled by default.
 
 ## `[paths]`
 
-Paths are resolved relative to the directory containing `config.ini`.
+- `project_root`: target shown to agents as `/workspace` on Linux. The
+  bundled value is `.`; pass `--project-root /path/to/target` or use `..`
+  when the harness is embedded directly inside the target.
+- `task_file`, `prometheus_file`, `momus_file`: semantic inputs.
+- `schema_file`: debate response schema.
+- `adjudication_schema_file`: independent-review schema.
+- `runs_dir`: terminal, immutable audit archives.
+- `state_dir`: durable live checkpoints; must be a dedicated narrow
+  directory and is hidden from agents.
 
-### `project_root`
+Do not place `state_dir` at root, at the home directory, or around the
+project root. It must not overlap `runs_dir`.
 
-The target directory given to Codex through `-C`.
+Set `project_root` to the narrowest directory that contains the inputs agents
+need. It defines both their visible workspace and the boundary for
+`project_file` evidence.
 
-Default `..` assumes the harness lives directly inside the target project.
+## `[isolation]`
 
-### `task_file`
+### `enabled`
 
-Default `task.md`.
+Must be true when blind mode is enabled.
 
-### `prometheus_file`
+### `backend`
 
-Default `Prometheus.md`.
+- `auto`: bubblewrap on Linux, `sandbox-exec` on macOS;
+- `bubblewrap`;
+- `sandbox-exec`.
 
-### `momus_file`
+Preflight and run startup perform a real backend self-test.
+`sandbox-exec` is best-effort containment for non-blind macOS runs and is not
+accepted as equivalent to the Linux blind boundary.
 
-Default `Momus.MD`.
+### `extra_read_paths`
 
-### `schema_file`
+Optional comma/newline-separated narrow paths mounted read-only. Root, home,
+missing paths, and anything overlapping controller state are rejected.
 
-Default `schema.json`.
+## `[budget]`
 
-### `runs_dir`
+### Mandatory hard ceilings
 
-Completed run archives.
+- `max_model_calls`: includes openings, counters, repairs, audits, and model
+  adjudication;
+- `max_wall_minutes`: cumulative active controller time across resumes;
+- `max_total_tokens`: input plus output tokens reported by Codex.
 
----
+All three must be positive. A completed call that crosses a token/cost limit
+is archived as budget-exhausted before its response can advance the debate.
+If token accounting is enabled and Codex emits no parseable terminal usage,
+the controller fails closed.
+
+### Optional estimated-cost ceiling
+
+`max_estimated_cost_usd = 0` disables cost enforcement. To enable it, set a
+positive ceiling and current model-specific rates:
+
+- `input_usd_per_million`;
+- `cached_input_usd_per_million`;
+- `output_usd_per_million`.
+
+Input and output rates must be non-zero when the cost ceiling is active. A
+zero cached-input rate conservatively uses the full input rate. Rates are
+operator-supplied because models and pricing change. The result is an estimate
+based on Codex-reported tokens, not a billing statement.
+
+## `[evidence]`
+
+### `require_for_acceptance`
+
+When true, `ACCEPT` requires a non-empty evidence ledger. Disputed evidence
+always makes acceptance invalid. Project-file sources must resolve inside the
+project and are hashed. Every final-candidate source must still be
+independently checked by the adjudicator.
+
+Use project-relative paths, optionally followed by a `#L...` location.
+
+## `[adjudication]`
+
+### `mode = human`
+
+Default. Agent acceptance creates `ADJUDICATION_REQUEST.md` and a JSON
+template but does not publish consensus. Finalize with:
+
+```bash
+python3 debate.py --adjudicate <run-id> --review-file review.json \
+  --reviewer "name-or-auditable-id"
+```
+
+### `mode = model`
+
+Runs an independent judge. `model` must be explicit and different from
+`[codex] model`; inherited or identical models are rejected. Use
+`reasoning_effort` to set the judge's effort.
+
+An `APPROVE` review must contain a non-contradictory `verified` check with
+notes for every evidence source.
 
 ## `[output]`
 
-### `publish_prompts`
+- `publish_prompts`: include exact prompts in terminal archives.
+- `publish_raw_jsonl`: include Codex event streams.
+- `keep_private_runtime_on_success`: retain private state after terminal
+  archival.
+- `keep_private_runtime_on_failure`: must remain true; interrupted state is
+  required for durable resume.
 
-Copies every exact controller prompt into the run archive.
+## Resume invariants
 
-Useful for reproducibility.
+```bash
+python3 debate.py --resume <run-id>
+```
 
-### `publish_raw_jsonl`
+Task, roles, schemas, config, and effective project/control paths must retain
+their original identities. An in-flight checkpoint refuses automatic replay.
+If replay is acceptable:
 
-Copies raw `codex exec --json` streams into the run archive.
+```bash
+python3 debate.py --resume <run-id> --retry-inflight
+```
 
-### `keep_private_runtime_on_success`
-
-Usually false because the final run has already been archived.
-
-### `keep_private_runtime_on_failure`
-
-Usually true for debugging failed/interrupted runs.
+The failed call remains counted against the model-call budget.

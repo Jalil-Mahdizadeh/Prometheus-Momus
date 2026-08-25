@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0 — 2026-08-25
+
+Security, reliability, and portability hardening:
+
+- fail-closed per-agent OS/filesystem/session isolation;
+- redacted live status with no transcript path or thread identifiers;
+- durable, atomic checkpoints with explicit in-flight replay acknowledgement;
+- hard model-call, active-wall-time, and token budgets plus optional
+  estimated-cost enforcement;
+- structured evidence ledgers with project-file hashing;
+- mandatory independent human or heterogeneous-model adjudication;
+- crash-atomic, idempotently resumable archive publication;
+- deterministic unit/fake-Codex integration tests, executable boundary tests,
+  and an opt-in real Codex schema/resume smoke test;
+- reusable domain-neutral task and agent-role templates;
+- conservative standalone defaults that inherit Codex model/search settings,
+  limit target visibility, and bound ordinary runs.
+
 ## 1.0.0 — 2026-08-24
 
 Initial public package.

@@ -16,7 +16,8 @@
       }
     },
     "proposal": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "blocking_issues": {
       "type": "array",
@@ -25,7 +26,53 @@
       }
     },
     "rationale": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "project_file",
+              "url",
+              "calculation",
+              "experiment",
+              "other"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "unverified",
+              "disputed"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "source",
+          "source_type",
+          "status",
+          "notes"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [
@@ -33,7 +80,8 @@
     "critique",
     "proposal",
     "blocking_issues",
-    "rationale"
+    "rationale",
+    "evidence"
   ],
   "additionalProperties": false
 }

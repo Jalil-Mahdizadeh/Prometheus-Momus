@@ -5,6 +5,9 @@ heavily on the three semantic files.
 
 ## `task.md`
 
+A fresh checkout contains a neutral template, not a ready-made problem.
+Replace every instructional placeholder before a consequential run.
+
 A strong task usually specifies:
 
 - exact goal;
@@ -18,10 +21,15 @@ A strong task usually specifies:
 - required final output.
 
 For research tasks, explicitly require literature search, source quality,
-leakage controls, statistics, and falsification when relevant.
+leakage controls, statistics, and falsification when relevant. For software
+changes, require repository inspection, tests, operational constraints,
+migration/rollback risk, and simpler alternatives. Apply equivalent
+domain-specific standards to other tasks.
 
-For software architecture, explicitly require repository inspection, tests,
-operational constraints, migration risk, and simpler alternatives.
+The structured evidence ledger should contain only claims that materially
+affect the candidate. Use stable project-relative paths or canonical URLs,
+state uncertainty honestly, and give the independent adjudicator enough notes
+to reproduce the check.
 
 ## `Prometheus.md`
 
@@ -29,13 +37,14 @@ Prometheus should usually be constructive and synthesis-oriented.
 
 Useful role traits:
 
-- originality;
+- task and requirement fidelity;
+- evidence-aware reasoning;
 - implementation focus;
 - systems thinking;
 - willingness to replace its own weak ideas;
 - requirement for complete standalone counterproposals.
 
-## `Momus.MD`
+## `Momus.md`
 
 Momus should usually be adversarial without becoming contrarian for its own
 sake.
@@ -62,7 +71,20 @@ Typical starting points:
 
 High-reasoning models can make each turn expensive.
 
+Set call, wall-time, and token budgets before increasing round counts. Repairs
+and the final audit also consume calls.
+
+The bundled 2–6 round range is a bounded general-purpose starting point, not a
+quality target for every task.
+
 ## Final acceptance audit
 
 Keeping this enabled is recommended. It turns a tentative ACCEPT into one last
 falsification attempt rather than immediately terminating.
+
+## Independent adjudication
+
+Agent agreement is intentionally not terminal consensus. Prefer human mode
+for high-stakes or expensive decisions. If model mode is appropriate, select a
+meaningfully different model family and keep the judge independent of both
+debate sessions.

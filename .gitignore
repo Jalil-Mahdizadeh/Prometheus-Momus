@@ -2,7 +2,9 @@
 RUN_STATUS.json
 LATEST_RUN.txt
 .debate.lock
+.prometheus-momus-state/
 runs/*
+graphify-out/
 
 # Keep empty runs directory in distributions if desired
 !runs/.gitkeep

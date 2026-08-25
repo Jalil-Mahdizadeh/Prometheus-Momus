@@ -1,56 +1,150 @@
-# TASK
+# Task Specification Template
 
-> **REPLACE THIS TEMPLATE WITH YOUR ACTUAL TASK.**
+This file is intentionally domain-neutral. Replace the instructional
+placeholders before starting a consequential debate. Be concrete: the agents
+can only evaluate criteria, evidence, and constraints that the task states or
+that they can legitimately inspect.
 
-## Goal
+## Objective
 
-Describe exactly what the two agents should resolve, design, review, decide,
-or improve.
+[State the exact question, decision, problem, or outcome the debate must
+resolve.]
 
 ## Context
 
-Provide the project background the agents need.
+[Describe the current situation, why the decision matters, and any relevant
+history. Identify the project files, systems, users, or stakeholders that
+define the problem.]
 
-## Constraints
+## Required deliverable
 
-- Constraint 1
-- Constraint 2
-- Constraint 3
+[Specify the form of the final work product: recommendation, design, plan,
+review, root-cause analysis, prioritized options, or another concrete output.]
 
-## Priorities
+## Scope
 
-Rank the criteria that matter most.
+### In scope
 
-1. ...
-2. ...
-3. ...
+- [Item the agents must address.]
+- [Item the agents must address.]
 
-## Required investigation
+### Out of scope
 
-State what the agents should inspect or research, for example:
+- [Explicit exclusion.]
+- [Explicit exclusion.]
 
-- repository files;
-- experimental results;
-- literature/web sources;
-- competing methods;
-- calculations;
-- assumptions and failure modes.
+## Hard constraints
 
-## Success criteria
+- [Budget, deadline, compatibility, policy, safety, or resource constraint.]
+- [Required interface, dependency, platform, or operating condition.]
+- [Action the agents must not recommend or take.]
 
-Define what a strong final answer must achieve.
+## Required inputs
 
-## Kill / rejection criteria
+- [Project-relative file or directory the agents must inspect.]
+- [Canonical external source, dataset, specification, or other input.]
+- [Known fact or decision that should be treated as authoritative.]
 
-State conditions under which an idea or proposal should be rejected rather
-than rescued.
+If current external facts matter, require live verification and identify the
+preferred source types. If web research is unnecessary, say so explicitly.
 
-## Required final output
+## Evaluation criteria
 
-Specify the sections, decisions, protocol, architecture, report, or other
-deliverable the final consensus should contain.
+Rank or weight the criteria that determine the best candidate. Adapt this list
+to the task:
 
-## Special instructions
+1. Correctness and requirement coverage.
+2. Evidence quality and reproducibility.
+3. Feasibility under the stated constraints.
+4. Safety, security, privacy, and reliability.
+5. Cost, performance, and operational burden.
+6. Maintainability and reversibility.
+7. Simplicity relative to delivered value.
 
-Add domain-specific rules here. The controller will treat this task as
-authoritative.
+State any mandatory threshold that overrides the ranking.
+
+## Alternatives to consider
+
+Require comparison with:
+
+- the status quo or no-action option;
+- the simplest viable approach;
+- the strongest credible alternative;
+- any named candidate that must be included or excluded.
+
+## Evidence standard
+
+For each claim that could change the decision, require an evidence-ledger
+entry. Use project-relative paths for repository evidence and canonical URLs
+for external evidence. Distinguish facts, calculations, assumptions, and
+inferences. Mark unresolved or disputed claims honestly.
+
+## Risk and validation
+
+Require the agents to identify:
+
+- the strongest argument against the preferred candidate;
+- likely failure and misuse modes;
+- security, privacy, compliance, and operational risks where relevant;
+- a proportionate test or review that could falsify the recommendation;
+- rollback, recovery, or exit conditions;
+- unknowns that require a human decision.
+
+## Required final structure
+
+The complete proposal should contain:
+
+### A. Recommendation
+
+A direct answer and decision status appropriate to the task.
+
+### B. Assumptions and constraints
+
+The material conditions on which the answer depends.
+
+### C. Options considered
+
+A concise comparison of credible alternatives, including the status quo and
+the simplest viable option.
+
+### D. Selected proposal
+
+The complete design, plan, or recommendation at an implementation-ready level
+appropriate to the task.
+
+### E. Evidence
+
+The decisive supporting and contradicting evidence, with uncertainty stated.
+
+### F. Risks and mitigations
+
+Material failure modes, safeguards, tradeoffs, and residual risk.
+
+### G. Execution plan
+
+Sequenced actions, owners or decision points, dependencies, and validation
+steps.
+
+### H. Success and stop criteria
+
+Observable measures for success, plus results or conditions that should cause
+revision, rollback, or rejection.
+
+### I. Unresolved questions
+
+Only questions that materially prevent or qualify the decision.
+
+## Acceptance standard
+
+Recommend acceptance only when the candidate:
+
+- answers the stated objective directly;
+- satisfies every hard constraint;
+- is supported by a non-disputed evidence ledger;
+- compares credible alternatives fairly;
+- includes a feasible validation and execution path;
+- exposes material uncertainty and residual risk; and
+- has no unresolved blocking issue.
+
+A negative or no-action recommendation is valid when it is the most defensible
+outcome. Do not manufacture agreement or novelty merely to avoid it.

@@ -16,7 +16,7 @@ The core invocation relies on:
 - optionally `--model`
 - optionally Codex `--config` overrides for reasoning effort and web search.
 
-As of 24 August 2026 these primitives are present in the official
+As of 25 August 2026 these primitives are present in the official
 `openai/codex` source:
 
 - CLI exec definition:
@@ -35,6 +35,10 @@ Codex evolves rapidly. The package therefore includes:
 
 which checks for the CLI and expected flags without making a model call.
 
+The controller also relies on terminal JSONL usage events (currently
+`turn.completed.usage`) when token/cost ceilings are enabled. Missing usage
+fails closed rather than silently disabling accounting.
+
 ## Output-file defensive behavior
 
 The harness creates all output parent directories before invoking
@@ -48,6 +52,24 @@ output-file failures when a parent directory does not already exist.
 The harness repeats model, sandbox, schema, web-search, and related CLI
 options on every resumed call. Do not assume all invocation flags from the
 original call are automatically the intended settings for later turns.
+
+The test suite includes a two-call real CLI smoke test for schema-constrained
+output across resume. It is opt-in because it spends model calls:
+
+```bash
+PROMETHEUS_MOMUS_REAL_CODEX_SMOKE=1 \
+  python3 -m unittest tests.test_real_codex_smoke -v
+```
+
+Set `PROMETHEUS_MOMUS_SMOKE_MODEL` to pin a test model.
+
+## Outer isolation compatibility
+
+Linux isolation binds the resolved Codex executable at `/codex`. The
+standalone Codex binary is the best-tested layout; dynamically linked or
+wrapper-based installations may require their narrow runtime paths in
+`isolation.extra_read_paths`. Preflight catches namespace creation problems,
+while the opt-in real smoke test catches end-to-end invocation changes.
 
 ## Version policy
 

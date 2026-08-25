@@ -18,7 +18,8 @@ independent human or heterogeneous-model adjudication
 APPROVE -> CONSENSUS     REJECT -> REJECTED
 ```
 
-The round ceiling and hard budgets can terminate earlier without consensus.
+The round ceiling and any enabled hard budgets can terminate earlier without
+consensus.
 
 ## Three permission layers
 

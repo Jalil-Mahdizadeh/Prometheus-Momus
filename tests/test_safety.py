@@ -60,6 +60,19 @@ class UsageAndBudgetTests(unittest.TestCase):
         with self.assertRaisesRegex(BudgetExceeded, "no parseable token usage"):
             tracker.record_usage(None)
 
+    def test_zero_limits_are_unlimited(self):
+        tracker = self.tracker(
+            max_calls=0,
+            max_wall_seconds=0,
+            max_total_tokens=0,
+            max_estimated_cost_usd=0,
+        )
+        for _ in range(5):
+            tracker.begin_call()
+            tracker.record_usage(None)
+        self.assertEqual(tracker.calls, 5)
+        self.assertIsNone(tracker.remaining_wall_seconds())
+
     def test_zero_cached_rate_uses_conservative_input_rate(self):
         tracker = self.tracker(
             max_estimated_cost_usd=0.000005,

@@ -74,8 +74,9 @@ High-reasoning models can make each turn expensive.
 Set call, wall-time, and token budgets before increasing round counts. Repairs
 and the final audit also consume calls.
 
-The bundled 2–6 round range is a bounded general-purpose starting point, not a
-quality target for every task.
+The bundled 4–10 round range targets large adversarial work. Lower it for
+routine tasks. Its model-call, wall-time, token, and cost ceilings are
+unlimited by default; set positive limits whenever bounded usage matters.
 
 ## Final acceptance audit
 
@@ -84,7 +85,8 @@ falsification attempt rather than immediately terminating.
 
 ## Independent adjudication
 
-Agent agreement is intentionally not terminal consensus. Prefer human mode
-for high-stakes or expensive decisions. If model mode is appropriate, select a
-meaningfully different model family and keep the judge independent of both
-debate sessions.
+Agent agreement is intentionally not terminal consensus. The bundled profile
+uses an isolated, explicitly different model and therefore runs unattended.
+Switch to human mode whenever the decision requires accountable expert
+approval; model adjudication does not replace legally or operationally
+required human review.

@@ -3,11 +3,12 @@
 All runtime settings are in `config.ini`. Paths are resolved relative to the
 directory containing that file.
 
-The bundled baseline is intentionally portable: it uses the harness directory
-as `project_root`, inherits the operator's model, reasoning, and web-search
-settings, keeps agents read-only, allows 2–6 counter-rounds, caps execution at
-16 model calls / 120 active minutes / 250,000 tokens, and requires human
-adjudication. Change these values deliberately for the target task.
+The bundled profile is intentionally portable and autonomous: it uses the
+harness directory as `project_root`, runs `gpt-5.6-sol` at `max` effort with
+live web search, keeps agents read-only, allows 4–10 counter-rounds, and uses
+an independent `gpt-5.5` adjudicator at `xhigh` effort. Model-call, wall-time,
+token, and estimated-cost ceilings default to unlimited. Change values in
+`config.ini` deliberately for the target task and operating budget.
 
 ## `[debate]`
 
@@ -43,15 +44,15 @@ Progress-report interval while a Codex subprocess is active.
 
 ### `turn_timeout_minutes`
 
-Per-call timeout. `0` disables only this per-call limit; the total wall
-budget remains mandatory.
+Per-call timeout. `0` disables this per-call limit; a positive total wall
+budget remains in force when configured.
 
 ## `[codex]`
 
 ### `model` and `reasoning_effort`
 
-Blank values inherit Codex configuration. Explicit values are passed on every
-new and resumed call.
+Explicit values are passed on every new and resumed call. Blank values remain
+supported and inherit Codex configuration, but the bundled profile pins both.
 
 ### `web_search`
 
@@ -113,31 +114,34 @@ missing paths, and anything overlapping controller state are rejected.
 
 ## `[budget]`
 
-### Mandatory hard ceilings
+### Optional hard ceilings
 
 - `max_model_calls`: includes openings, counters, repairs, audits, and model
   adjudication;
 - `max_wall_minutes`: cumulative active controller time across resumes;
 - `max_total_tokens`: input plus output tokens reported by Codex.
 
-All three must be positive. A completed call that crosses a token/cost limit
-is archived as budget-exhausted before its response can advance the debate.
-If token accounting is enabled and Codex emits no parseable terminal usage,
-the controller fails closed.
+Each setting accepts `0` for unlimited or a positive ceiling. The bundled
+profile uses `0` for all three. A completed call that crosses an enabled token
+or cost limit is archived as budget-exhausted before its response can advance
+the debate. If token accounting is enabled and Codex emits no parseable
+terminal usage, the controller fails closed.
 
 ### Optional estimated-cost ceiling
 
-`max_estimated_cost_usd = 0` disables cost enforcement. To enable it, set a
-positive ceiling and current model-specific rates:
+`max_estimated_cost_usd = 0` means unlimited and disables cost enforcement. To
+enable it, set a positive ceiling and current model-specific rates:
 
 - `input_usd_per_million`;
 - `cached_input_usd_per_million`;
 - `output_usd_per_million`.
 
 Input and output rates must be non-zero when the cost ceiling is active. A
-zero cached-input rate conservatively uses the full input rate. Rates are
-operator-supplied because models and pricing change. The result is an estimate
-based on Codex-reported tokens, not a billing statement.
+zero cached-input rate conservatively uses the full input rate. The bundled
+rates are conservative for its debate and judge models, including published
+long-context multipliers as of 2026-08-26. Verify them against current pricing
+before enabling a ceiling. The result is an estimate based on Codex-reported
+tokens, not a billing statement.
 
 ## `[evidence]`
 
@@ -152,24 +156,26 @@ Use project-relative paths, optionally followed by a `#L...` location.
 
 ## `[adjudication]`
 
+### `mode = model`
+
+Default. Runs an independent judge, making the ordinary workflow unattended.
+`model` must be explicit and different from `[codex] model`; inherited or
+identical models are rejected. Use `reasoning_effort` to set the judge's
+effort. The bundled judge is `gpt-5.5` at `xhigh`.
+
+An `APPROVE` review must contain a non-contradictory `verified` check with
+notes for every evidence source.
+
 ### `mode = human`
 
-Default. Agent acceptance creates `ADJUDICATION_REQUEST.md` and a JSON
-template but does not publish consensus. Finalize with:
+Agent acceptance creates `ADJUDICATION_REQUEST.md` and a JSON template but
+does not publish consensus. Finalize with:
 
 ```bash
 python3 debate.py --adjudicate <run-id> --review-file review.json \
   --reviewer "name-or-auditable-id"
 ```
 
-### `mode = model`
-
-Runs an independent judge. `model` must be explicit and different from
-`[codex] model`; inherited or identical models are rejected. Use
-`reasoning_effort` to set the judge's effort.
-
-An `APPROVE` review must contain a non-contradictory `verified` check with
-notes for every evidence source.
 
 ## `[output]`
 

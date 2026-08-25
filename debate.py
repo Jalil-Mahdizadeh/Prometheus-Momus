@@ -55,7 +55,7 @@ from controller_safety import (
 from runtime_isolation import IsolationManager
 
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 PACKAGE_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PACKAGE_DIR / "config.ini"
 
@@ -319,9 +319,9 @@ def load_settings(config_path: Path, project_root_override: Optional[str]) -> Se
         isolation_enabled = as_bool(
             isolation.get("enabled", "true"), key="isolation.enabled"
         )
-        max_model_calls = int(budget.get("max_model_calls", "40"))
-        max_wall_minutes = int(budget.get("max_wall_minutes", "360"))
-        max_total_tokens = int(budget.get("max_total_tokens", "1500000"))
+        max_model_calls = int(budget.get("max_model_calls", "0"))
+        max_wall_minutes = int(budget.get("max_wall_minutes", "0"))
+        max_total_tokens = int(budget.get("max_total_tokens", "0"))
         max_estimated_cost_usd = float(
             budget.get("max_estimated_cost_usd", "0")
         )
@@ -398,12 +398,12 @@ def load_settings(config_path: Path, project_root_override: Optional[str]) -> Se
             "output.keep_private_runtime_on_failure must be true because "
             "durable resume state cannot be discarded"
         )
-    if max_model_calls < 1:
-        die("budget.max_model_calls must be >= 1")
-    if max_wall_minutes < 1:
-        die("budget.max_wall_minutes must be >= 1")
-    if max_total_tokens < 1:
-        die("budget.max_total_tokens must be >= 1")
+    if max_model_calls < 0:
+        die("budget.max_model_calls must be >= 0 (0 means unlimited)")
+    if max_wall_minutes < 0:
+        die("budget.max_wall_minutes must be >= 0 (0 means unlimited)")
+    if max_total_tokens < 0:
+        die("budget.max_total_tokens must be >= 0 (0 means unlimited)")
     rates = (
         max_estimated_cost_usd,
         input_usd_per_million,

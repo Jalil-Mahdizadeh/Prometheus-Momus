@@ -19,8 +19,9 @@ An ARM64 Codex binary should be run on an ARM64 node.
 ## Allocation lifetime
 
 The Slurm allocation walltime and `budget.max_wall_minutes` are independent.
-Configure the controller budget below the scheduler limit so it can archive a
-clean budget-exhausted outcome before Slurm sends termination signals. Leave
+The bundled controller value is `0` (unlimited), so set a positive controller
+budget below the scheduler limit for batch jobs. This lets the harness archive
+a clean budget-exhausted outcome before Slurm sends termination signals. Leave
 at least one heartbeat interval of margin.
 
 Check:

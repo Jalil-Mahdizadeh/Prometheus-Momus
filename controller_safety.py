@@ -127,7 +127,7 @@ def parse_codex_usage(jsonl_text: str) -> ModelUsage | None:
 
 
 class BudgetTracker:
-    """Durable model-call, wall-time, token, and estimated-cost accounting."""
+    """Durable resource accounting; a zero limit disables that ceiling."""
 
     def __init__(
         self,

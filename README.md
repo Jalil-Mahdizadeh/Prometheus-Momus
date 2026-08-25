@@ -12,7 +12,8 @@ persistent OpenAI Codex CLI agents in an autonomous adversarial loop.
 - **Prometheus** constructs and synthesizes.
 - **Momus** independently analyzes, challenges, and counterproposes.
 - A Python controller manages persistent threads, turn-taking, structured
-  output, mandatory challenge rounds, enforced agent isolation, hard budgets,
+  output, mandatory challenge rounds, enforced agent isolation, optional hard
+  budgets,
   durable checkpoints, evidence ledgers, independent adjudication, and
   crash-atomic run archives.
 
@@ -57,18 +58,19 @@ and Codex home; Linux additionally uses separate PID/user namespaces.
 
 ## What users edit
 
-The semantic behavior is intentionally concentrated in three files:
+The task and optional role customization are concentrated in three files:
 
-1. `task.md` — a neutral specification template to complete with the actual
-   problem and success criteria.
-2. `Prometheus.md` — reusable constructive-agent role.
-3. `Momus.md` — reusable adversarial-agent role.
+1. `task.md` — complete this neutral template with the actual problem and
+   success criteria.
+2. `Prometheus.md` — reusable constructive-agent role; edit only if needed.
+3. `Momus.md` — reusable adversarial-agent role; edit only if needed.
 
-Runtime behavior lives in:
+All runtime parameters are explicitly populated in:
 
 4. `config.ini` — rounds, model, isolation, budgets, adjudication, and output.
 
-Normally you should not need to edit the controller or either JSON schema.
+Normally users only complete `task.md`, select the target, and adjust values in
+`config.ini`; the controller and JSON schemas require no changes.
 
 ---
 
@@ -148,19 +150,20 @@ cd /path/to/my-project
 
 Edit `config.ini`.
 
-The bundled baseline is domain-neutral and deliberately bounded:
+The bundled profile is domain-neutral, configured for a large autonomous
+debate, and requires no human adjudication:
 
 ```ini
 [debate]
-min_counter_rounds = 2
-max_counter_rounds = 6
+min_counter_rounds = 4
+max_counter_rounds = 10
 blind_second_agent = true
 final_acceptance_audit = true
 
 [codex]
-model =
-reasoning_effort =
-web_search = inherit
+model = gpt-5.6-sol
+reasoning_effort = max
+web_search = live
 sandbox = read-only
 
 [isolation]
@@ -168,17 +171,22 @@ enabled = true
 backend = auto
 
 [budget]
-max_model_calls = 16
-max_wall_minutes = 120
-max_total_tokens = 250000
+max_model_calls = 0
+max_wall_minutes = 0
+max_total_tokens = 0
+max_estimated_cost_usd = 0
 
 [adjudication]
-mode = human
+mode = model
+model = gpt-5.5
+reasoning_effort = xhigh
 ```
 
-Blank model and reasoning values, plus `web_search = inherit`, preserve the
-operator's Codex settings. Pin them only when reproducibility requires it.
-Increase rounds and budgets deliberately for unusually complex tasks.
+For the four budget ceilings, `0` means unlimited. This avoids terminating a
+large debate because of a generic package limit, but it can incur substantial
+usage and cost. Set positive ceilings before running when bounded spend or
+runtime matters. The populated price rates make cost enforcement available by
+changing only `max_estimated_cost_usd`; verify current pricing first.
 
 See `docs/CONFIGURATION.md` for all options.
 
@@ -248,7 +256,7 @@ The controller provides several protocol safeguards:
 - premature-acceptance repair;
 - rejection of `ACCEPT` with blocking issues;
 - rejection of `ACCEPT` with missing or disputed evidence;
-- optional mandatory final acceptance audit;
+- configurable final acceptance audit;
 - hard maximum counter-round limit;
 - independent human or heterogeneous-model adjudication before consensus.
 
@@ -340,17 +348,22 @@ task, roles, schemas, and config.
 
 ## Independent adjudication
 
-In the default `human` mode, agent agreement creates a review packet but
-does not publish consensus. Complete the generated JSON template,
-independently verify every evidence source, and run:
+The default `model` mode runs an isolated `gpt-5.5` adjudicator at `xhigh`
+effort after tentative agreement, so the normal workflow is unattended. The
+adjudicator is separate from both debate sessions and must verify every final
+evidence source before approval.
+
+To require a person instead, set `mode = human`. Agent agreement will then
+create a review packet without publishing consensus. Complete the generated
+JSON template, independently verify every evidence source, and run:
 
 ```bash
 python3 debate.py --adjudicate <run-id> --review-file review.json \
   --reviewer "name-or-auditable-id"
 ```
 
-`mode = model` is also supported, but the adjudicator must use an explicitly
-different model from both debating agents.
+Any model adjudicator must use an explicitly different model from both
+debating agents.
 
 ## Preflight
 

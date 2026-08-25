@@ -272,14 +272,14 @@ def load_settings(config_path: Path, project_root_override: Optional[str]) -> Se
     parser = configparser.ConfigParser(interpolation=None)
     parser.read(config_path, encoding="utf-8")
 
-    required_sections = {"debate", "codex", "paths", "output"}
+    required_sections = {"debate", "codex", "paths"}
     missing_sections = required_sections - set(parser.sections())
     if missing_sections:
         die(f"Config is missing sections: {sorted(missing_sections)}")
 
     package_dir = config_path.resolve().parent
 
-    configured_root = parser["paths"].get("project_root", "..").strip() or ".."
+    configured_root = parser["paths"].get("project_root", ".").strip() or "."
     project_root = (
         Path(project_root_override).expanduser().resolve()
         if project_root_override
@@ -308,6 +308,7 @@ def load_settings(config_path: Path, project_root_override: Optional[str]) -> Se
     adjudication = (
         parser["adjudication"] if parser.has_section("adjudication") else {}
     )
+    output = parser["output"] if parser.has_section("output") else {}
 
     try:
         min_rounds = int(parser["debate"].get("min_counter_rounds", "3"))
@@ -362,19 +363,19 @@ def load_settings(config_path: Path, project_root_override: Optional[str]) -> Se
         )
 
         publish_prompts = as_bool(
-            parser["output"].get("publish_prompts", "true"),
+            output.get("publish_prompts", "true"),
             key="publish_prompts",
         )
         publish_raw = as_bool(
-            parser["output"].get("publish_raw_jsonl", "true"),
+            output.get("publish_raw_jsonl", "true"),
             key="publish_raw_jsonl",
         )
         keep_success = as_bool(
-            parser["output"].get("keep_private_runtime_on_success", "false"),
+            output.get("keep_private_runtime_on_success", "false"),
             key="keep_private_runtime_on_success",
         )
         keep_failure = as_bool(
-            parser["output"].get("keep_private_runtime_on_failure", "true"),
+            output.get("keep_private_runtime_on_failure", "true"),
             key="keep_private_runtime_on_failure",
         )
 

@@ -107,6 +107,11 @@ class IsolationManager:
             Path(discovered_codex) if discovered_codex else None
         )
         self.codex_executable = executable.resolve() if executable else None
+        self.codex_code_mode_host: Optional[Path] = None
+        if self.codex_executable is not None:
+            companion = self.codex_executable.with_name("codex-code-mode-host")
+            if companion.is_file():
+                self.codex_code_mode_host = companion.resolve()
         self.backend = self._resolve_backend(backend) if enabled else "none"
 
         self._validate_paths()
@@ -326,6 +331,14 @@ class IsolationManager:
         args.extend(self._system_mount_args())
         args.extend(["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"])
         args.extend(["--ro-bind", str(self.codex_executable), "/codex"])
+        if self.codex_code_mode_host is not None:
+            args.extend(
+                [
+                    "--ro-bind",
+                    str(self.codex_code_mode_host),
+                    "/codex-code-mode-host",
+                ]
+            )
         args.extend(["--ro-bind", str(schema_file.resolve()), "/output-schema.json"])
         project_flag = "--bind" if project_writable else "--ro-bind"
         args.extend([project_flag, str(self.project_root), "/workspace"])
@@ -387,6 +400,11 @@ class IsolationManager:
             self.project_root,
             agent_dir,
             self.codex_executable or Path("/usr/bin/false"),
+            *(
+                (self.codex_code_mode_host,)
+                if self.codex_code_mode_host is not None
+                else ()
+            ),
             schema_file.resolve(),
             *self.extra_read_paths,
         ]

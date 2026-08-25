@@ -7,11 +7,10 @@ Autonomous large-debate defaults:
 - pinned `gpt-5.6-sol` debate agents at `max` reasoning with live web search;
 - independent `gpt-5.5` model adjudication at `xhigh`, making the default
   workflow human-free;
-- expanded 4–10 counter-round profile with unlimited model-call, active-wall,
-  token, and estimated-cost ceilings by default;
-- populated conservative pricing inputs so users can enable cost enforcement
-  by setting a single ceiling;
-- zero-limit semantics validated, documented, and covered by regression tests.
+- compact common configuration with 4–10 rounds and unlimited model-call,
+  wall-time, token, and cost ceilings by default;
+- optional user-supplied price rates rather than stale bundled prices;
+- isolation support for the Codex `codex-code-mode-host` companion.
 
 ## 1.1.0 — 2026-08-25
 

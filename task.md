@@ -1,150 +1,55 @@
-# Task Specification Template
+# Task Template
 
-This file is intentionally domain-neutral. Replace the instructional
-placeholders before starting a consequential debate. Be concrete: the agents
-can only evaluate criteria, evidence, and constraints that the task states or
-that they can legitimately inspect.
+Replace the bracketed guidance with the actual task before running a debate.
 
-## Objective
+## Goal
 
-[State the exact question, decision, problem, or outcome the debate must
-resolve.]
+[State exactly what the agents must resolve, design, review, decide, or
+improve.]
 
 ## Context
 
-[Describe the current situation, why the decision matters, and any relevant
-history. Identify the project files, systems, users, or stakeholders that
-define the problem.]
+[Provide only the background needed to understand the task and why it matters.]
 
-## Required deliverable
+## Scope and constraints
 
-[Specify the form of the final work product: recommendation, design, plan,
-review, root-cause analysis, prioritized options, or another concrete output.]
+- [What is in scope.]
+- [What is explicitly out of scope.]
+- [Budget, deadline, compatibility, safety, or resource constraints.]
+- [Actions or dependencies that are prohibited.]
 
-## Scope
+## Priorities
 
-### In scope
+Rank the criteria that determine the best answer.
 
-- [Item the agents must address.]
-- [Item the agents must address.]
+1. [Primary criterion.]
+2. [Secondary criterion.]
+3. [Remaining material criteria.]
 
-### Out of scope
+State any hard threshold that overrides this ranking.
 
-- [Explicit exclusion.]
-- [Explicit exclusion.]
+## Required investigation
 
-## Hard constraints
+Specify what the agents must inspect or verify, such as:
 
-- [Budget, deadline, compatibility, policy, safety, or resource constraint.]
-- [Required interface, dependency, platform, or operating condition.]
-- [Action the agents must not recommend or take.]
+- project files, data, or experimental results;
+- primary literature, official documentation, or current web sources;
+- competing approaches and the status quo;
+- calculations, assumptions, risks, and failure modes.
 
-## Required inputs
+## Success and rejection criteria
 
-- [Project-relative file or directory the agents must inspect.]
-- [Canonical external source, dataset, specification, or other input.]
-- [Known fact or decision that should be treated as authoritative.]
+[Define observable conditions for success and conditions that require an idea
+to be revised or rejected.]
 
-If current external facts matter, require live verification and identify the
-preferred source types. If web research is unnecessary, say so explicitly.
+## Required final output
 
-## Evaluation criteria
+[List the decisions, sections, evidence, implementation detail, validation, and
+next actions the final answer must contain.]
 
-Rank or weight the criteria that determine the best candidate. Adapt this list
-to the task:
+## Autonomy and special rules
 
-1. Correctness and requirement coverage.
-2. Evidence quality and reproducibility.
-3. Feasibility under the stated constraints.
-4. Safety, security, privacy, and reliability.
-5. Cost, performance, and operational burden.
-6. Maintainability and reversibility.
-7. Simplicity relative to delivered value.
-
-State any mandatory threshold that overrides the ranking.
-
-## Alternatives to consider
-
-Require comparison with:
-
-- the status quo or no-action option;
-- the simplest viable approach;
-- the strongest credible alternative;
-- any named candidate that must be included or excluded.
-
-## Evidence standard
-
-For each claim that could change the decision, require an evidence-ledger
-entry. Use project-relative paths for repository evidence and canonical URLs
-for external evidence. Distinguish facts, calculations, assumptions, and
-inferences. Mark unresolved or disputed claims honestly.
-
-## Risk and validation
-
-Require the agents to identify:
-
-- the strongest argument against the preferred candidate;
-- likely failure and misuse modes;
-- security, privacy, compliance, and operational risks where relevant;
-- a proportionate test or review that could falsify the recommendation;
-- rollback, recovery, or exit conditions;
-- unknowns that require a human decision.
-
-## Required final structure
-
-The complete proposal should contain:
-
-### A. Recommendation
-
-A direct answer and decision status appropriate to the task.
-
-### B. Assumptions and constraints
-
-The material conditions on which the answer depends.
-
-### C. Options considered
-
-A concise comparison of credible alternatives, including the status quo and
-the simplest viable option.
-
-### D. Selected proposal
-
-The complete design, plan, or recommendation at an implementation-ready level
-appropriate to the task.
-
-### E. Evidence
-
-The decisive supporting and contradicting evidence, with uncertainty stated.
-
-### F. Risks and mitigations
-
-Material failure modes, safeguards, tradeoffs, and residual risk.
-
-### G. Execution plan
-
-Sequenced actions, owners or decision points, dependencies, and validation
-steps.
-
-### H. Success and stop criteria
-
-Observable measures for success, plus results or conditions that should cause
-revision, rollback, or rejection.
-
-### I. Unresolved questions
-
-Only questions that materially prevent or qualify the decision.
-
-## Acceptance standard
-
-Recommend acceptance only when the candidate:
-
-- answers the stated objective directly;
-- satisfies every hard constraint;
-- is supported by a non-disputed evidence ledger;
-- compares credible alternatives fairly;
-- includes a feasible validation and execution path;
-- exposes material uncertainty and residual risk; and
-- has no unresolved blocking issue.
-
-A negative or no-action recommendation is valid when it is the most defensible
-outcome. Do not manufacture agreement or novelty merely to avoid it.
+- Complete the debate without asking the user to resolve choices. State
+  reasonable assumptions and use the priorities above.
+- Never use Graphify, inspect its output, or create its artifacts.
+- [Add any domain-specific evidence, safety, formatting, or tool rules.]

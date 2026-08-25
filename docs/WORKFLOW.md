@@ -1,12 +1,12 @@
 # Workflow design guide
 
-The harness is intentionally domain-neutral. The quality of the debate depends
-heavily on the three semantic files.
+The controller and the three bundled semantic templates are domain-neutral.
+Debate quality depends heavily on how those files are completed.
 
 ## `task.md`
 
-A fresh checkout contains a neutral template, not a ready-made problem.
-Replace every instructional placeholder before a consequential run.
+Replace the bracketed guidance with the actual problem before a consequential
+run.
 
 A strong task usually specifies:
 

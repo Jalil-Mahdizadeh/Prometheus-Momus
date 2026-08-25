@@ -65,11 +65,13 @@ Set `PROMETHEUS_MOMUS_SMOKE_MODEL` to pin a test model.
 
 ## Outer isolation compatibility
 
-Linux isolation binds the resolved Codex executable at `/codex`. The
-standalone Codex binary is the best-tested layout; dynamically linked or
-wrapper-based installations may require their narrow runtime paths in
-`isolation.extra_read_paths`. Preflight catches namespace creation problems,
-while the opt-in real smoke test catches end-to-end invocation changes.
+Linux isolation binds the resolved Codex executable at `/codex`. When the
+installed bundle includes the adjacent `codex-code-mode-host` companion, it is
+also mounted at `/codex-code-mode-host`; current Codex releases may launch it
+for code-mode tools. Dynamically linked or wrapper-based installations may
+require their narrow runtime paths in `isolation.extra_read_paths`. Preflight
+catches namespace creation problems, while the opt-in real smoke test catches
+end-to-end invocation changes.
 
 ## Version policy
 

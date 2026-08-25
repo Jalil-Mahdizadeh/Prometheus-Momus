@@ -41,6 +41,7 @@ Linux bubblewrap exposes:
 
 ```text
 /codex                  resolved Codex executable, read-only
+/codex-code-mode-host   optional adjacent Codex companion, read-only
 /workspace              target project
 /output-schema.json     stage schema, read-only
 /agent                  only this agent's private directory

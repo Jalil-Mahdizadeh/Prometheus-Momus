@@ -1,14 +1,18 @@
 # Configuration reference
 
-All runtime settings are in `config.ini`. Paths are resolved relative to the
-directory containing that file.
+`config.ini` exposes the common runtime choices. Omitted advanced options use
+the defaults documented here. Paths are resolved relative to the directory
+containing the file.
+
+`[debate]`, `[codex]`, and `[paths]` are required. All other sections are
+optional.
 
 The bundled profile is intentionally portable and autonomous: it uses the
 harness directory as `project_root`, runs `gpt-5.6-sol` at `max` effort with
 live web search, keeps agents read-only, allows 4–10 counter-rounds, and uses
 an independent `gpt-5.5` adjudicator at `xhigh` effort. Model-call, wall-time,
-token, and estimated-cost ceilings default to unlimited. Change values in
-`config.ini` deliberately for the target task and operating budget.
+token, and estimated-cost ceilings default to unlimited. This keeps the shipped
+file short without removing advanced controls.
 
 ## `[debate]`
 
@@ -137,11 +141,10 @@ enable it, set a positive ceiling and current model-specific rates:
 - `output_usd_per_million`.
 
 Input and output rates must be non-zero when the cost ceiling is active. A
-zero cached-input rate conservatively uses the full input rate. The bundled
-rates are conservative for its debate and judge models, including published
-long-context multipliers as of 2026-08-26. Verify them against current pricing
-before enabling a ceiling. The result is an estimate based on Codex-reported
-tokens, not a billing statement.
+zero cached-input rate conservatively uses the full input rate. Price rates are
+not shipped because they change; add current rates before enabling a ceiling.
+The result is an estimate based on Codex-reported tokens, not a billing
+statement.
 
 ## `[evidence]`
 
@@ -177,7 +180,7 @@ python3 debate.py --adjudicate <run-id> --review-file review.json \
 ```
 
 
-## `[output]`
+## `[output]` (optional)
 
 - `publish_prompts`: include exact prompts in terminal archives.
 - `publish_raw_jsonl`: include Codex event streams.

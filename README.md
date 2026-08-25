@@ -12,15 +12,12 @@ persistent OpenAI Codex CLI agents in an autonomous adversarial loop.
 - **Prometheus** constructs and synthesizes.
 - **Momus** independently analyzes, challenges, and counterproposes.
 - A Python controller manages persistent threads, turn-taking, structured
-  output, mandatory challenge rounds, enforced agent isolation, optional hard
-  budgets,
-  durable checkpoints, evidence ledgers, independent adjudication, and
-  crash-atomic run archives.
+  output, challenge rounds, agent isolation, budgets, durable checkpoints,
+  evidence ledgers, independent adjudication, and run archives.
 
-The package is deliberately **domain-neutral**. It can be used for research
-design, architecture reviews, repository strategy, experimental planning,
-technical decisions, product design, or other tasks where independent
-proposal/challenge cycles are useful.
+The controller and bundled templates are domain-neutral. They can be adapted to
+research, engineering, planning, review, or other tasks that benefit from an
+independent proposal-and-challenge cycle.
 
 > This is an **unofficial community tool**. It is not an OpenAI product and is
 > not affiliated with or endorsed by OpenAI.
@@ -58,19 +55,18 @@ and Codex home; Linux additionally uses separate PID/user namespaces.
 
 ## What users edit
 
-The task and optional role customization are concentrated in three files:
+The task and agent instructions are concentrated in three files:
 
-1. `task.md` — complete this neutral template with the actual problem and
-   success criteria.
-2. `Prometheus.md` — reusable constructive-agent role; edit only if needed.
-3. `Momus.md` — reusable adversarial-agent role; edit only if needed.
+1. `task.md` — complete the template with the actual problem and criteria.
+2. `Prometheus.md` — the constructive-agent template.
+3. `Momus.md` — the adversarial-agent template.
 
-All runtime parameters are explicitly populated in:
+Common runtime choices are in:
 
-4. `config.ini` — rounds, model, isolation, budgets, adjudication, and output.
+4. `config.ini` — rounds, models, web search, target, budgets, and adjudication.
 
-Normally users only complete `task.md`, select the target, and adjust values in
-`config.ini`; the controller and JSON schemas require no changes.
+Normally users only edit these files. Safe advanced settings remain internal
+defaults and are documented in `docs/CONFIGURATION.md`.
 
 ---
 
@@ -96,8 +92,8 @@ installing or upgrading Codex.
 
 ### Option A — keep the harness separate
 
-Complete the bundled task template, then point both preflight and execution at
-the intended target:
+Complete the bundled task template, then point preflight and execution at the
+intended target:
 
 ```bash
 cd /path/to/prometheus-momus
@@ -150,25 +146,21 @@ cd /path/to/my-project
 
 Edit `config.ini`.
 
-The bundled profile is domain-neutral, configured for a large autonomous
-debate, and requires no human adjudication:
+The bundled runtime profile is configured for a large autonomous debate and
+requires no human adjudication:
 
 ```ini
 [debate]
 min_counter_rounds = 4
 max_counter_rounds = 10
-blind_second_agent = true
-final_acceptance_audit = true
 
 [codex]
 model = gpt-5.6-sol
 reasoning_effort = max
 web_search = live
-sandbox = read-only
 
-[isolation]
-enabled = true
-backend = auto
+[paths]
+project_root = .
 
 [budget]
 max_model_calls = 0
@@ -185,14 +177,15 @@ reasoning_effort = xhigh
 For the four budget ceilings, `0` means unlimited. This avoids terminating a
 large debate because of a generic package limit, but it can incur substantial
 usage and cost. Set positive ceilings before running when bounded spend or
-runtime matters. The populated price rates make cost enforcement available by
-changing only `max_estimated_cost_usd`; verify current pricing first.
+runtime matters. To enable a cost ceiling, also add current model price rates
+as described in the advanced configuration reference.
 
 See `docs/CONFIGURATION.md` for all options.
 
 ## Read-only by default
 
-The default is:
+The safe internal default is read-only. To make it explicit or change it, add
+`sandbox` under `[codex]`:
 
 ```ini
 sandbox = read-only

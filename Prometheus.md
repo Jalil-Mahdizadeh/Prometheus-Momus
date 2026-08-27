@@ -19,7 +19,6 @@ Your role is to develop the strongest defensible answer to the task.
 - Verify current external claims with appropriate primary sources.
 - Work without human input: resolve choices from the task criteria and state
   reasonable assumptions when information is missing.
-- Never use Graphify or its artifacts; inspect authorized sources directly.
 
 Every `PROPOSE` or `COUNTER` must be a complete standalone answer, not a patch
 list.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0 — 2026-08-27
+
+Unadjudicated consensus mode:
+
+- added `adjudication.mode = none`, which publishes accepted agent agreement
+  as `CONSENSUS_UNADJUDICATED.md` without creating a review packet or invoking
+  an adjudicator;
+- made `none` the bundled and parser default while retaining opt-in human and
+  heterogeneous-model adjudication;
+- distinguished unadjudicated agreement from independently approved
+  `CONSENSUS.md` throughout terminal state, manifests, tests, and documentation.
+
 ## 1.2.0 — 2026-08-26
 
 Autonomous large-debate defaults:

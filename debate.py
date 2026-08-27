@@ -55,7 +55,7 @@ from controller_safety import (
 from runtime_isolation import IsolationManager
 
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 PACKAGE_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PACKAGE_DIR / "config.ini"
 
@@ -487,11 +487,11 @@ def load_settings(config_path: Path, project_root_override: Optional[str]) -> Se
         if item.strip()
     )
 
-    adjudication_mode = adjudication.get("mode", "human").strip().lower() or "human"
+    adjudication_mode = adjudication.get("mode", "none").strip().lower() or "none"
     adjudicator_model = adjudication.get("model", "").strip()
     adjudicator_reasoning = adjudication.get("reasoning_effort", "high").strip()
-    if adjudication_mode not in {"human", "model"}:
-        die("adjudication.mode must be human or model")
+    if adjudication_mode not in {"none", "human", "model"}:
+        die("adjudication.mode must be none, human, or model")
     debate_model = parser["codex"].get("model", "").strip()
     if adjudication_mode == "model":
         if not debate_model or not adjudicator_model:
@@ -1368,6 +1368,69 @@ or proof that external research was exhaustive.
             encoding="utf-8",
         )
 
+    def write_unadjudicated_consensus(
+        self,
+        active: dict,
+        accepting_agent: "Agent",
+        acceptance_response: dict,
+        rounds: int,
+    ) -> None:
+        caveats = acceptance_response["critique"]
+        caveat_text = (
+            "\n".join(f"- {item}" for item in caveats)
+            if caveats
+            else "None reported."
+        )
+
+        text = f"""# Prometheus–Momus Debate — Unadjudicated Consensus
+
+## Status
+
+**CONSENSUS REACHED WITHOUT INDEPENDENT ADJUDICATION**
+
+- Run ID: `{self.run_id}`
+- Final candidate: `{active['candidate_id']}`
+- Candidate author: `{active['author']}`
+- Accepted by: `{accepting_agent.display_name}`
+- Adjudication mode: `none`
+- Completed adversarial counter-rounds: `{rounds}`
+- Prometheus thread: `{self.prometheus.thread_id}`
+- Momus thread: `{self.momus.thread_id}`
+- Model override: `{self.s.model or 'inherit'}`
+- Reasoning effort override: `{self.s.reasoning_effort or 'inherit'}`
+- Web search: `{self.s.web_search}`
+- Sandbox: `{self.s.sandbox}`
+
+## Final Proposal / State
+
+{active['proposal']}
+
+## Acceptance Rationale
+
+{acceptance_response['rationale']}
+
+## Remaining Non-blocking Caveats
+
+{caveat_text}
+
+## Interpretation
+
+The two persistent agents could no longer justify a material improvement under
+the configured protocol. No independent human or model adjudicator reviewed or
+approved this result.
+
+This artifact records agent agreement, not independently validated consensus,
+empirical validation, legal advice, proof of correctness, or proof that
+external research was exhaustive.
+"""
+        (self.private_dir / "CONSENSUS_UNADJUDICATED.md").write_text(
+            text, encoding="utf-8"
+        )
+        (self.private_dir / "final_candidate.json").write_text(
+            json.dumps(active, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
     def write_rejected(
         self,
         active: dict,
@@ -1495,7 +1558,7 @@ The round limit was reached. Do not treat the latest state as consensus.
         print(f"Model-call budget:       {self.s.max_model_calls}")
         print(f"Wall-time budget:        {self.s.max_wall_minutes} minutes")
         print(f"Token budget:            {self.s.max_total_tokens}")
-        print(f"Independent gate:        {self.s.adjudication_mode}")
+        print(f"Adjudication mode:       {self.s.adjudication_mode}")
         print(f"Private live transcript: {self.private_transcript}")
         print("\nMonitor in another shell with:")
         print(f"  tail -f '{self.private_transcript}'\n")
@@ -1620,6 +1683,10 @@ ADJUDICATION PACKET
         if not isinstance(active, dict) or not isinstance(acceptance, dict):
             raise RuntimeError("Pending-adjudication checkpoint is incomplete")
 
+        if self.s.adjudication_mode == "none":
+            self._finalize_unadjudicated_consensus(active, acceptance)
+            return
+
         self._write_adjudication_request(active, acceptance)
         if self.s.adjudication_mode == "human":
             self.write_status(
@@ -1659,6 +1726,49 @@ ADJUDICATION PACKET
             review,
             reviewer=f"model:{self.s.adjudicator_model}",
         )
+
+    def _finalize_unadjudicated_consensus(
+        self,
+        active: dict,
+        acceptance: dict,
+    ) -> None:
+        if self.prometheus is None or self.momus is None:
+            self._restore_agents()
+
+        accepting_agent = (
+            self.prometheus
+            if acceptance.get("agent") == "prometheus"
+            else self.momus
+        )
+        if accepting_agent is None:
+            raise RuntimeError("Accepting agent is unavailable")
+        response = acceptance.get("response")
+        if not isinstance(response, dict):
+            raise RuntimeError("Acceptance response is unavailable")
+        rounds = int(acceptance.get("rounds", 0))
+
+        outcome = "consensus_unadjudicated"
+        self.write_unadjudicated_consensus(
+            active,
+            accepting_agent,
+            response,
+            rounds,
+        )
+        self.write_manifest(outcome, active)
+        self.save_checkpoint(
+            phase="publishing",
+            outcome=outcome,
+            active=active,
+            adjudication=None,
+            inflight=None,
+        )
+        self._complete_publication()
+
+        print("\n" + "=" * 72)
+        print(" CONSENSUS REACHED WITHOUT INDEPENDENT ADJUDICATION")
+        print("=" * 72)
+        print(f"Run archive: {self.run_dir}")
+        print(f"Report:      {self.run_dir / 'CONSENSUS_UNADJUDICATED.md'}")
 
     def _complete_publication(self) -> None:
         outcome = str(self.state.get("outcome", "unknown"))

@@ -22,10 +22,9 @@ class ShippedDefaultsTest(unittest.TestCase):
         self.assertTrue(settings.isolation_enabled)
         self.assertTrue(settings.require_evidence_for_acceptance)
 
-        self.assertEqual(settings.adjudication_mode, "model")
-        self.assertEqual(settings.adjudicator_model, "gpt-5.5")
-        self.assertNotEqual(settings.adjudicator_model, settings.model)
-        self.assertEqual(settings.adjudicator_reasoning_effort, "xhigh")
+        self.assertEqual(settings.adjudication_mode, "none")
+        self.assertEqual(settings.adjudicator_model, "")
+        self.assertEqual(settings.adjudicator_reasoning_effort, "high")
 
         self.assertEqual(settings.max_model_calls, 0)
         self.assertEqual(settings.max_wall_minutes, 0)

@@ -28,8 +28,8 @@ domain-specific standards to other tasks.
 
 The structured evidence ledger should contain only claims that materially
 affect the candidate. Use stable project-relative paths or canonical URLs,
-state uncertainty honestly, and give the independent adjudicator enough notes
-to reproduce the check.
+state uncertainty honestly, and include enough notes for a later reviewer to
+reproduce the check.
 
 ## `Prometheus.md`
 
@@ -83,10 +83,10 @@ unlimited by default; set positive limits whenever bounded usage matters.
 Keeping this enabled is recommended. It turns a tentative ACCEPT into one last
 falsification attempt rather than immediately terminating.
 
-## Independent adjudication
+## Adjudication
 
-Agent agreement is intentionally not terminal consensus. The bundled profile
-uses an isolated, explicitly different model and therefore runs unattended.
-Switch to human mode whenever the decision requires accountable expert
-approval; model adjudication does not replace legally or operationally
+The bundled `none` mode archives agent agreement as explicitly unadjudicated
+consensus. Use `model` when an independent, heterogeneous-model gate is
+valuable, and use `human` whenever the decision requires accountable expert
+approval. Model adjudication does not replace legally or operationally
 required human review.

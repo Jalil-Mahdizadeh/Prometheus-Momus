@@ -84,14 +84,20 @@ writable target so an agent cannot rewrite the program later used to resume.
 
 ## Evidence and adjudication
 
-Agent `ACCEPT` is tentative. The controller rejects acceptance with blocking
-issues, missing required evidence, or disputed evidence. Project files are
-resolved inside the project and hashed; URLs are syntax-checked. These checks
-prove provenance/integrity, not the truth of the associated claim.
+Agent `ACCEPT` is subject to the configured protocol and adjudication mode.
+The controller rejects acceptance with blocking issues, missing required
+evidence, or disputed evidence. Project files are resolved inside the project
+and hashed; URLs are syntax-checked. These checks prove provenance/integrity,
+not the truth of the associated claim.
 
-Consensus is published only after an independent human or explicitly different
-model verifies every evidence source. This reduces correlated blind spots but
-does not replace empirical validation, expert review, or legal/safety review.
+The default `none` mode performs no independent evidence verification and
+publishes agent agreement only as `CONSENSUS_UNADJUDICATED.md`. Treat that
+artifact as two-agent agreement, not validation.
+
+`CONSENSUS.md` is reserved for results approved by an independent human or
+explicitly different model that verifies every evidence source. This reduces
+correlated blind spots but does not replace empirical validation, expert
+review, or legal/safety review.
 
 ## Durable state and archives
 

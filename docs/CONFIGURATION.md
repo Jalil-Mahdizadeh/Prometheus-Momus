@@ -9,10 +9,10 @@ optional.
 
 The bundled profile is intentionally portable and autonomous: it uses the
 harness directory as `project_root`, runs `gpt-5.6-sol` at `max` effort with
-live web search, keeps agents read-only, allows 4–10 counter-rounds, and uses
-an independent `gpt-5.5` adjudicator at `xhigh` effort. Model-call, wall-time,
-token, and estimated-cost ceilings default to unlimited. This keeps the shipped
-file short without removing advanced controls.
+live web search, keeps agents read-only, allows 4–10 counter-rounds, and
+publishes agreement without independent adjudication. Model-call, wall-time,
+token, and estimated-cost ceilings default to unlimited. This keeps the
+shipped file short without removing advanced controls.
 
 ## `[debate]`
 
@@ -152,19 +152,26 @@ statement.
 
 When true, `ACCEPT` requires a non-empty evidence ledger. Disputed evidence
 always makes acceptance invalid. Project-file sources must resolve inside the
-project and are hashed. Every final-candidate source must still be
-independently checked by the adjudicator.
+project and are hashed. In `human` and `model` modes, every final-candidate
+source must also be independently checked by the adjudicator.
 
 Use project-relative paths, optionally followed by a `#L...` location.
 
 ## `[adjudication]`
 
+### `mode = none`
+
+Default. Publishes accepted agent agreement as
+`CONSENSUS_UNADJUDICATED.md` without creating a review packet or making an
+adjudicator model call. The report explicitly states that no independent
+review occurred. Omitting the section or leaving `mode` blank also selects
+`none`.
+
 ### `mode = model`
 
-Default. Runs an independent judge, making the ordinary workflow unattended.
-`model` must be explicit and different from `[codex] model`; inherited or
-identical models are rejected. Use `reasoning_effort` to set the judge's
-effort. The bundled judge is `gpt-5.5` at `xhigh`.
+Runs an independent judge. `model` must be explicit and different from
+`[codex] model`; inherited or identical models are rejected. Use
+`reasoning_effort` to set the judge's effort.
 
 An `APPROVE` review must contain a non-contradictory `verified` check with
 notes for every evidence source.
@@ -178,7 +185,6 @@ does not publish consensus. Finalize with:
 python3 debate.py --adjudicate <run-id> --review-file review.json \
   --reviewer "name-or-auditable-id"
 ```
-
 
 ## `[output]` (optional)
 

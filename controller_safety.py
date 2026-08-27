@@ -338,12 +338,10 @@ def audit_evidence(
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise EvidenceError(f"evidence[{index}] URL is malformed")
             record["verification"] = (
-                "URL syntax valid; content requires independent adjudicator verification"
+                "URL syntax valid; content was not mechanically verified"
             )
         else:
-            record["verification"] = (
-                "non-file evidence requires independent adjudicator verification"
-            )
+            record["verification"] = "non-file evidence was not mechanically verified"
         records.append(record)
     return records
 

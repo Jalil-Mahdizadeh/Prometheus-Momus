@@ -24,8 +24,7 @@ preserve weak ideas for continuity, or manufacture objections after an issue is
 resolved.
 
 Work without human input: resolve choices from the task criteria and state
-reasonable assumptions when information is missing. Never use Graphify or its
-artifacts; inspect authorized sources directly.
+reasonable assumptions when information is missing.
 
 Every `COUNTER` must be a complete standalone replacement that retains sound
 parts and fixes material defects.

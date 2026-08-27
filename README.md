@@ -13,7 +13,7 @@ persistent OpenAI Codex CLI agents in an autonomous adversarial loop.
 - **Momus** independently analyzes, challenges, and counterproposes.
 - A Python controller manages persistent threads, turn-taking, structured
   output, challenge rounds, agent isolation, budgets, durable checkpoints,
-  evidence ledgers, independent adjudication, and run archives.
+  evidence ledgers, configurable adjudication, and run archives.
 
 The controller and bundled templates are domain-neutral. They can be adapted to
 research, engineering, planning, review, or other tasks that benefit from an
@@ -43,9 +43,11 @@ Prometheus thread A                  Momus thread B
                                           |
                                tentative ACCEPT
                                           |
-                               independent gate
-                                          |
-                                  APPROVE / REJECT
+                              adjudication mode
+                                 /          \
+                         none (default)   human / model
+                              |              |
+                    unadjudicated archive  APPROVE / REJECT
 ```
 
 The controller exposes the opponent's **current candidate**, not the other
@@ -147,7 +149,8 @@ cd /path/to/my-project
 Edit `config.ini`.
 
 The bundled runtime profile is configured for a large autonomous debate and
-requires no human adjudication:
+publishes clearly labeled, unadjudicated agent agreement without a third
+model call:
 
 ```ini
 [debate]
@@ -169,9 +172,7 @@ max_total_tokens = 0
 max_estimated_cost_usd = 0
 
 [adjudication]
-mode = model
-model = gpt-5.5
-reasoning_effort = xhigh
+mode = none
 ```
 
 For the four budget ceilings, `0` means unlimited. This avoids terminating a
@@ -251,7 +252,8 @@ The controller provides several protocol safeguards:
 - rejection of `ACCEPT` with missing or disputed evidence;
 - configurable final acceptance audit;
 - hard maximum counter-round limit;
-- independent human or heterogeneous-model adjudication before consensus.
+- explicit unadjudicated output, or opt-in independent human or
+  heterogeneous-model adjudication.
 
 If the agents do not agree within the limit, the run ends as
 `NO_CONSENSUS`, not forced consensus.
@@ -298,7 +300,7 @@ Every run receives a unique ID and is archived automatically:
 ```text
 runs/
 └── 20260824-225500-2f93a1cd/
-    ├── CONSENSUS.md             # or REJECTED/NO_CONSENSUS/BUDGET_EXHAUSTED
+    ├── CONSENSUS_UNADJUDICATED.md # default accepted outcome
     ├── ADJUDICATION.json        # when adjudication occurred
     ├── DEBATE_TRANSCRIPT.md
     ├── history.jsonl
@@ -339,12 +341,24 @@ python3 debate.py --resume <run-id> --retry-inflight
 Input hashes and effective project/control paths must still match the original
 task, roles, schemas, and config.
 
-## Independent adjudication
+## Adjudication modes
 
-The default `model` mode runs an isolated `gpt-5.5` adjudicator at `xhigh`
-effort after tentative agreement, so the normal workflow is unattended. The
-adjudicator is separate from both debate sessions and must verify every final
-evidence source before approval.
+The default `none` mode publishes agent agreement immediately as
+`CONSENSUS_UNADJUDICATED.md`. It does not create a review packet, invoke a
+third model, or claim independent approval.
+
+To add an independent model gate, configure an explicit model different from
+the debating model:
+
+```ini
+[adjudication]
+mode = model
+model = gpt-5.5
+reasoning_effort = xhigh
+```
+
+The adjudicator runs in a separate isolated session and must verify every
+final evidence source before approval.
 
 To require a person instead, set `mode = human`. Agent agreement will then
 create a review packet without publishing consensus. Complete the generated
@@ -412,7 +426,8 @@ behavior.
 - Keep outer isolation enabled for blind runs.
 - Treat untrusted repositories as untrusted input.
 - Review external commands before enabling write-capable modes.
-- Treat agent agreement as tentative until independent adjudication.
+- Treat `CONSENSUS_UNADJUDICATED.md` as agent agreement, not independent
+  validation.
 - Agent consensus does not replace domain-expert, legal, medical, financial,
   security, or safety review where those are required.
 

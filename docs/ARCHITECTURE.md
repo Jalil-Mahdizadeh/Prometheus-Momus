@@ -13,9 +13,13 @@ tentative agent ACCEPT
         |
 final falsification audit
         |
-independent human or heterogeneous-model adjudication
+configured adjudication mode
         |
-APPROVE -> CONSENSUS     REJECT -> REJECTED
+        +-> none -> CONSENSUS_UNADJUDICATED
+        |
+        +-> human or heterogeneous model
+                    |
+          APPROVE -> CONSENSUS     REJECT -> REJECTED
 ```
 
 The round ceiling and any enabled hard budgets can terminate earlier without
@@ -80,7 +84,8 @@ Evidence audit behavior:
 - URLs are syntax-checked;
 - calculations, experiments, and other sources remain explicitly unverified
   by the controller;
-- all final-candidate sources require independent adjudicator checks.
+- human/model approval requires independent checks for all final-candidate
+  sources; `none` mode performs no such review.
 
 `adjudication_schema.json` is separate so debate decisions cannot be confused
 with final approval.
@@ -100,6 +105,10 @@ initialized -> opening_done -> debating
            -> pending_adjudication -> publishing -> terminal
 ```
 
+`pending_adjudication` is the durable tentative-acceptance checkpoint. In
+`none` mode the controller resolves it immediately into unadjudicated
+publication; human mode can remain there while awaiting review.
+
 Before every model subprocess, the controller increments the call budget and
 writes an `inflight` record. A successful protocol transition clears it.
 After interruption, replay is never automatic because the persistent thread
@@ -117,6 +126,7 @@ resumable.
 
 - round limit: `NO_CONSENSUS.md`;
 - hard budget: `BUDGET_EXHAUSTED.md`;
+- agent agreement without adjudication: `CONSENSUS_UNADJUDICATED.md`;
 - independent rejection: `REJECTED.md`;
 - independent approval: `CONSENSUS.md`.
 

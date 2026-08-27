@@ -120,6 +120,65 @@ keep_private_runtime_on_failure = true
         controller.latest_file = self.harness / "LATEST_RUN.txt"
         controller.lock_path = self.harness / ".debate.lock"
 
+    def test_none_mode_publishes_unadjudicated_consensus(self):
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8").replace(
+                "mode = human",
+                "mode = none",
+            ),
+            encoding="utf-8",
+        )
+        settings = load_settings(self.config, None)
+        environment = dict(self.environment)
+        environment.pop("FAKE_CODEX_FAIL_MARKER")
+
+        with patch.dict(os.environ, environment, clear=True):
+            controller = DebateController(settings)
+            self.localize_controller_files(controller)
+            run_id = controller.run_id
+            controller.run()
+
+        archive = settings.runs_dir / run_id
+        report = archive / "CONSENSUS_UNADJUDICATED.md"
+        self.assertTrue(report.is_file())
+        self.assertIn(
+            "WITHOUT INDEPENDENT ADJUDICATION",
+            report.read_text(encoding="utf-8"),
+        )
+        self.assertFalse((archive / "CONSENSUS.md").exists())
+        self.assertFalse((archive / "ADJUDICATION.json").exists())
+        self.assertFalse((archive / "ADJUDICATION_REQUEST.md").exists())
+        self.assertFalse((archive / "adjudication_request.json").exists())
+        self.assertFalse((archive / "adjudication_template.json").exists())
+        self.assertEqual(self.counter.read_text(encoding="utf-8"), "4")
+
+        manifest = json.loads(
+            (archive / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["outcome"], "consensus_unadjudicated")
+        self.assertEqual(manifest["adjudication_mode"], "none")
+        checkpoint = json.loads(
+            (archive / "checkpoint.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(checkpoint["phase"], "terminal")
+        self.assertEqual(checkpoint["outcome"], "consensus_unadjudicated")
+        self.assertIsNone(checkpoint["adjudication"])
+        self.assertFalse((settings.state_dir / run_id).exists())
+
+    def test_missing_adjudication_section_defaults_to_none(self):
+        block = """[adjudication]
+mode = human
+model =
+reasoning_effort = high
+
+"""
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8").replace(block, ""),
+            encoding="utf-8",
+        )
+        settings = load_settings(self.config, None)
+        self.assertEqual(settings.adjudication_mode, "none")
+
     def test_interruption_requires_acknowledgement_then_human_gate(self):
         with patch.dict(os.environ, self.environment, clear=True):
             controller = DebateController(self.settings)

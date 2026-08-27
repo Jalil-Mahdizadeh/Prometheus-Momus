@@ -51,5 +51,4 @@ next actions the final answer must contain.]
 
 - Complete the debate without asking the user to resolve choices. State
   reasonable assumptions and use the priorities above.
-- Never use Graphify, inspect its output, or create its artifacts.
 - [Add any domain-specific evidence, safety, formatting, or tool rules.]

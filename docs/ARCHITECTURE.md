@@ -22,8 +22,11 @@ configured adjudication mode
           APPROVE -> CONSENSUS     REJECT -> REJECTED
 ```
 
-The round ceiling and any enabled hard budgets can terminate earlier without
-consensus.
+The round ceiling publishes a resumable `NO_CONSENSUS` attempt. An explicit
+`--resume <run-id> --extra-rounds N` transition returns that checkpoint to
+`debating` with a higher cumulative ceiling; this may be repeated. Enabled
+hard budgets can still terminate without consensus and are not bypassed by a
+round extension.
 
 ## Three permission layers
 
@@ -72,6 +75,11 @@ Separate Codex homes make possession of another agent's thread identifier
 insufficient to access that agent's local session state. Live public status
 does not expose those identifiers.
 
+A round-limit outcome retains the session storage required to use the same
+persistent threads, including both private Codex homes for isolated runs.
+Other successful terminal outcomes follow
+the configured private-runtime cleanup policy.
+
 ## Structured protocol and evidence
 
 `schema.json` constrains debate turns. The controller independently validates
@@ -105,6 +113,14 @@ initialized -> opening_done -> debating
            -> pending_adjudication -> publishing -> terminal
 ```
 
+The `terminal` phase is normally final. The deliberate exception is
+`outcome=no_consensus`: a positive `--extra-rounds` request records a
+continuation event, increments the continuation index, raises the cumulative
+`round_limit`, clears only the previous private terminal artifacts, and commits
+the phase back to `debating`. The next-agent pointer, active candidate,
+sequence number, histories, thread IDs, and resource accounting remain
+unchanged.
+
 `pending_adjudication` is the durable tentative-acceptance checkpoint. In
 `none` mode the controller resolves it immediately into unadjudicated
 publication; human mode can remain there while awaiting review.
@@ -121,14 +137,22 @@ Token/cost/wall/call usage is restored from the checkpoint.
 
 Terminal artifacts are first assembled in private state. Publication copies
 them to a hidden staging directory and atomically renames it to
-`runs/<run-id>/`. A `publishing` checkpoint makes this step idempotently
-resumable.
+`runs/<run-id>/` for the initial attempt. Continuations publish to
+`runs/<run-id>-continuation-<index>/`, preserving every earlier attempt
+without rewriting it. Each continuation archive contains the cumulative
+transcript and logs. A `publishing` checkpoint makes each publication
+idempotently resumable.
 
 - round limit: `NO_CONSENSUS.md`;
 - hard budget: `BUDGET_EXHAUSTED.md`;
 - agent agreement without adjudication: `CONSENSUS_UNADJUDICATED.md`;
 - independent rejection: `REJECTED.md`;
 - independent approval: `CONSENSUS.md`.
+
+A round-limit archive is terminal as an audit snapshot but leaves its private
+state available for an explicit extension. A later consensus, rejection, or
+budget exhaustion follows the normal cleanup setting; prior attempt archives
+remain untouched.
 
 Ordinary failures remain private and resumable instead of being mistaken for
 a terminal archive.

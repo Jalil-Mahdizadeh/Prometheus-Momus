@@ -53,6 +53,10 @@ The harness repeats model, sandbox, schema, web-search, and related CLI
 options on every resumed call. Do not assume all invocation flags from the
 original call are automatically the intended settings for later turns.
 
+Round-limit continuation uses the same `codex exec resume <thread-id>`
+primitive and, for isolated runs, retained per-agent Codex homes.
+`--extra-rounds` introduces no additional Codex CLI requirement.
+
 The test suite includes a two-call real CLI smoke test for schema-constrained
 output across resume. It is opt-in because it spends model calls:
 

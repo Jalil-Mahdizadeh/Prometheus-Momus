@@ -78,6 +78,17 @@ The bundled 4–10 round range targets large adversarial work. Lower it for
 routine tasks. Its model-call, wall-time, token, and cost ceilings are
 unlimited by default; set positive limits whenever bounded usage matters.
 
+If a useful debate reaches its ceiling with unresolved material issues, extend
+that same debate instead of editing `max_counter_rounds` or starting over:
+
+```bash
+python3 debate.py --resume <run-id> --extra-rounds 3
+```
+
+Extensions preserve both agents' histories and can be repeated. Add rounds
+deliberately: accumulated usage and configured budgets carry forward, and more
+rounds are valuable only when they can resolve a concrete remaining issue.
+
 ## Final acceptance audit
 
 Keeping this enabled is recommended. It turns a tentative ACCEPT into one last

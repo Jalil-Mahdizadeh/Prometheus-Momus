@@ -23,8 +23,11 @@ Completed `COUNTER` rounds required before either agent may return
 
 ### `max_counter_rounds`
 
-Hard cap on committed counter-rounds. Reaching it publishes
-`NO_CONSENSUS.md`.
+Initial cap on committed counter-rounds. Reaching it publishes
+`NO_CONSENSUS.md` and retains the private agent sessions. Continue with
+`--resume <run-id> --extra-rounds N`; each positive value raises the
+cumulative ceiling by that many rounds. The command may be repeated without
+changing this configuration value.
 
 ### `blind_second_agent`
 
@@ -84,9 +87,10 @@ Direct Codex CLI controls. Project rules remain enabled by default.
 - `task_file`, `prometheus_file`, `momus_file`: semantic inputs.
 - `schema_file`: debate response schema.
 - `adjudication_schema_file`: independent-review schema.
-- `runs_dir`: terminal, immutable audit archives.
-- `state_dir`: durable live checkpoints; must be a dedicated narrow
-  directory and is hidden from agents.
+- `runs_dir`: immutable per-attempt audit archives. Continuation attempts use
+  a `-continuation-<index>` suffix.
+- `state_dir`: durable live checkpoints and retained no-consensus agent
+  sessions; must be a dedicated narrow directory and is hidden from agents.
 
 Do not place `state_dir` at root, at the home directory, or around the
 project root. It must not overlap `runs_dir`.
@@ -130,6 +134,10 @@ profile uses `0` for all three. A completed call that crosses an enabled token
 or cost limit is archived as budget-exhausted before its response can advance
 the debate. If token accounting is enabled and Codex emits no parseable
 terminal usage, the controller fails closed.
+
+All limits and accumulated usage carry across round-limit continuations.
+`--extra-rounds` changes only the round ceiling; it never resets a safety
+budget.
 
 ### Optional estimated-cost ceiling
 
@@ -190,8 +198,10 @@ python3 debate.py --adjudicate <run-id> --review-file review.json \
 
 - `publish_prompts`: include exact prompts in terminal archives.
 - `publish_raw_jsonl`: include Codex event streams.
-- `keep_private_runtime_on_success`: retain private state after terminal
-  archival.
+- `keep_private_runtime_on_success`: retain private state after a conclusive
+  terminal archive. `NO_CONSENSUS` state is retained regardless so it can be
+  continued; a later conclusive outcome uses this setting for normal
+  cleanup.
 - `keep_private_runtime_on_failure`: must remain true; interrupted state is
   required for durable resume.
 
@@ -210,3 +220,19 @@ python3 debate.py --resume <run-id> --retry-inflight
 ```
 
 The failed call remains counted against the model-call budget.
+
+For a terminal round-limit result, request additional rounds explicitly:
+
+```bash
+python3 debate.py --resume <run-id> --extra-rounds N
+```
+
+`N` must be positive. The controller requires a terminal
+`outcome=no_consensus` checkpoint, the retained Prometheus and Momus thread
+state, and no in-flight replay request. It adds `N` to the completed-round
+ceiling and records the continuation in the checkpoint. The same base run ID
+is used for every extension; immutable result archives gain
+`-continuation-<index>` suffixes.
+
+The command can be repeated after another `NO_CONSENSUS` result. Input-hash
+invariants and cumulative resource budgets continue to apply.

@@ -255,8 +255,10 @@ The controller provides several protocol safeguards:
 - explicit unadjudicated output, or opt-in independent human or
   heterogeneous-model adjudication.
 
-If the agents do not agree within the limit, the run ends as
-`NO_CONSENSUS`, not forced consensus.
+If the agents do not agree within the limit, the attempt publishes
+`NO_CONSENSUS`, not forced consensus. The persistent sessions are retained
+and can be continued for any positive number of additional rounds with an
+explicit CLI option.
 
 ## Blind Momus pre-analysis
 
@@ -318,6 +320,12 @@ runs/
     └── raw-jsonl/               # configurable
 ```
 
+A continued debate keeps every completed attempt as a separate immutable
+archive. The first result remains at `runs/<run-id>/`; later results use
+`runs/<run-id>-continuation-1/`, `-continuation-2/`, and so on. Each later
+archive contains the cumulative transcript and audit trail through that
+attempt.
+
 `LATEST_RUN.txt` points to the most recently archived run.
 
 No manual cleanup is required before starting another debate.
@@ -340,6 +348,37 @@ python3 debate.py --resume <run-id> --retry-inflight
 
 Input hashes and effective project/control paths must still match the original
 task, roles, schemas, and config.
+
+### Continue after the round ceiling
+
+A `NO_CONSENSUS` result is explicitly resumable. Add any positive number of
+counter-rounds without editing `config.ini`:
+
+```bash
+python3 debate.py --resume <run-id> --extra-rounds 4
+```
+
+The value is added to the completed round count. If the agents still do not
+agree, run the command again with another positive value; there is no
+controller limit on the number of continuations.
+
+Continuation uses the same Prometheus and Momus thread IDs. With isolation
+enabled, their private Codex homes are retained as well. Model-call,
+active-wall-time, token, and cost accounting
+also continue from the existing checkpoint, so configured safety budgets are
+not reset.
+
+The original `NO_CONSENSUS` archive is preserved. Each continuation publishes
+to a new suffixed archive while the base run ID remains the value passed to
+`--resume`. Private state is retained automatically after a round-limit
+outcome and is removed after a later terminal consensus/rejection unless
+configured otherwise. Deleting that private state makes continuation
+impossible. An archive alone is insufficient: runs whose private state was
+already cleaned, including default pre-1.4 no-consensus runs, cannot be
+continued directly.
+
+`--extra-rounds` is only valid for a completed `NO_CONSENSUS` run. Use an
+ordinary `--resume` for interrupted nonterminal work.
 
 ## Adjudication modes
 
@@ -399,6 +438,7 @@ python3 debate.py --project-root /path/to/project
 python3 debate.py --config /path/to/config.ini
 python3 debate.py --resume <run-id>
 python3 debate.py --resume <run-id> --retry-inflight
+python3 debate.py --resume <run-id> --extra-rounds 4
 python3 debate.py --adjudicate <run-id> --review-file review.json \
   --reviewer "name-or-auditable-id"
 python3 debate.py --version

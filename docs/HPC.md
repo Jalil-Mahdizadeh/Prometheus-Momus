@@ -95,5 +95,22 @@ python3 debate.py --resume <run-id> --retry-inflight
 Do not edit the task, roles, schemas, or config between the original run and
 resume; their hashes are part of the checkpoint contract.
 
+## Round-limit continuation
+
+A clean `NO_CONSENSUS` result is different from a scheduler interruption. Its
+checkpoint has no in-flight call and can be extended directly:
+
+```bash
+python3 debate.py --resume <run-id> --extra-rounds 4
+```
+
+The command may run in a later allocation as long as the same harness,
+project, config, and retained `.prometheus-momus-state/<run-id>/` directory
+are visible. Prior archives remain unchanged. Cumulative controller budgets
+still include the earlier attempts, and the new allocation must provide enough
+walltime for the requested rounds.
+
+## Linux isolation requirement
+
 Linux compute nodes must permit unprivileged user namespaces for bubblewrap.
 `./check.sh` exercises actual namespace creation inside the allocation.

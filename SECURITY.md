@@ -105,6 +105,13 @@ Private checkpoints live under `.prometheus-momus-state/<run-id>/` and are
 excluded from Git. Interrupted calls remain marked in-flight; replay requires
 `--retry-inflight` because the persistent thread may already have advanced.
 
+A `NO_CONSENSUS` archive intentionally leaves its private controller state
+and, for isolated runs, per-agent Codex homes in place so the same sessions can
+be continued with `--extra-rounds`. Those files are not copied into the
+public run archive, but they can contain session history and should remain access
+controlled. If no continuation is desired, the run-specific private state may
+be removed deliberately; doing so makes later continuation impossible.
+
 Terminal archives can contain prompts, model responses, project observations,
 source URLs, and evidence excerpts. Review them before sharing. Never place
 passwords, API keys, or unrelated private data in task/role files or exposed

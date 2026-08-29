@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.0 — 2026-08-29
+
+Repeatable round-limit continuation:
+
+- added `--resume <run-id> --extra-rounds N` for continuing a terminal
+  `NO_CONSENSUS` debate with the same persistent agent sessions;
+- retained private no-consensus session state while preserving every completed
+  attempt as an immutable `-continuation-<index>` archive;
+- kept input invariants and call, wall-time, token, and cost usage cumulative
+  across any number of extensions;
+- added deterministic integration coverage for repeated extensions followed by
+  consensus, plus complete workflow, architecture, configuration, HPC,
+  security, and compatibility documentation.
+
 ## 1.3.0 — 2026-08-27
 
 Unadjudicated consensus mode:

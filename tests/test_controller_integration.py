@@ -165,6 +165,102 @@ keep_private_runtime_on_failure = true
         self.assertIsNone(checkpoint["adjudication"])
         self.assertFalse((settings.state_dir / run_id).exists())
 
+    def test_no_consensus_can_be_continued_repeatedly(self):
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8").replace(
+                "mode = human",
+                "mode = none",
+            ),
+            encoding="utf-8",
+        )
+        settings = load_settings(self.config, None)
+        counter_environment = dict(self.environment)
+        counter_environment.pop("FAKE_CODEX_FAIL_MARKER")
+        counter_environment["FAKE_CODEX_ALWAYS_COUNTER"] = "1"
+
+        with patch.dict(os.environ, counter_environment, clear=True):
+            controller = DebateController(settings)
+            self.localize_controller_files(controller)
+            run_id = controller.run_id
+            controller.run()
+
+        base_archive = settings.runs_dir / run_id
+        base_report = base_archive / "NO_CONSENSUS.md"
+        original_report = base_report.read_text(encoding="utf-8")
+        self.assertIn("--extra-rounds N", original_report)
+        self.assertTrue((settings.state_dir / run_id).is_dir())
+
+        base_checkpoint = json.loads(
+            (base_archive / "checkpoint.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(base_checkpoint["outcome"], "no_consensus")
+        self.assertEqual(base_checkpoint["completed_rounds"], 2)
+        self.assertEqual(base_checkpoint["round_limit"], 2)
+        self.assertEqual(base_checkpoint["continuation_index"], 0)
+        base_threads = base_checkpoint["threads"]
+        self.assertTrue(all(base_threads.values()))
+        self.assertEqual(base_checkpoint["budget"]["calls"], 4)
+        self.assertTrue(base_checkpoint["resumable"])
+        with patch.dict(os.environ, counter_environment, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "--extra-rounds"):
+                DebateController(
+                    settings,
+                    resume_id=run_id,
+                )
+
+        with patch.dict(os.environ, counter_environment, clear=True):
+            continued = DebateController(
+                settings,
+                resume_id=run_id,
+                extra_rounds=2,
+            )
+            self.localize_controller_files(continued)
+            continued.run()
+
+        first_continuation = (
+            settings.runs_dir / f"{run_id}-continuation-1"
+        )
+        first_checkpoint = json.loads(
+            (first_continuation / "checkpoint.json").read_text(encoding="utf-8")
+        )
+        self.assertTrue((first_continuation / "NO_CONSENSUS.md").is_file())
+        self.assertEqual(first_checkpoint["completed_rounds"], 4)
+        self.assertEqual(first_checkpoint["round_limit"], 4)
+        self.assertEqual(first_checkpoint["continuation_index"], 1)
+        self.assertEqual(first_checkpoint["threads"], base_threads)
+        self.assertEqual(first_checkpoint["budget"]["calls"], 6)
+        self.assertTrue(first_checkpoint["resumable"])
+        self.assertEqual(base_report.read_text(encoding="utf-8"), original_report)
+        self.assertTrue((settings.state_dir / run_id).is_dir())
+
+        accepting_environment = dict(counter_environment)
+        accepting_environment.pop("FAKE_CODEX_ALWAYS_COUNTER")
+        with patch.dict(os.environ, accepting_environment, clear=True):
+            continued_again = DebateController(
+                settings,
+                resume_id=run_id,
+                extra_rounds=1,
+            )
+            self.localize_controller_files(continued_again)
+            continued_again.run()
+
+        final_archive = settings.runs_dir / f"{run_id}-continuation-2"
+        final_checkpoint = json.loads(
+            (final_archive / "checkpoint.json").read_text(encoding="utf-8")
+        )
+        self.assertTrue(
+            (final_archive / "CONSENSUS_UNADJUDICATED.md").is_file()
+        )
+        self.assertFalse((final_archive / "NO_CONSENSUS.md").exists())
+        self.assertEqual(final_checkpoint["round_limit"], 5)
+        self.assertEqual(final_checkpoint["continuation_index"], 2)
+        self.assertEqual(len(final_checkpoint["continuations"]), 2)
+        self.assertFalse(final_checkpoint["resumable"])
+        self.assertEqual(final_checkpoint["threads"], base_threads)
+        self.assertEqual(final_checkpoint["budget"]["calls"], 7)
+        self.assertEqual(self.counter.read_text(encoding="utf-8"), "7")
+        self.assertFalse((settings.state_dir / run_id).exists())
+
     def test_missing_adjudication_section_defaults_to_none(self):
         block = """[adjudication]
 mode = human

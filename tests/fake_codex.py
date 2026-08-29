@@ -25,6 +25,9 @@ def response_for(prompt: str) -> dict:
     elif "reduce anchoring" in prompt:
         decision = "PROPOSE"
         proposal = "Independent analysis"
+    elif os.environ.get("FAKE_CODEX_ALWAYS_COUNTER") == "1":
+        decision = "COUNTER"
+        proposal = "Continued standalone candidate"
     elif "ACCEPTANCE IS FORBIDDEN" in prompt:
         decision = "COUNTER"
         proposal = "Improved standalone candidate"

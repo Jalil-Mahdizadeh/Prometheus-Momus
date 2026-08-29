@@ -55,7 +55,7 @@ from controller_safety import (
 from runtime_isolation import IsolationManager
 
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 PACKAGE_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PACKAGE_DIR / "config.ini"
 
@@ -578,8 +578,12 @@ class DebateController:
         *,
         resume_id: Optional[str] = None,
         retry_inflight: bool = False,
+        extra_rounds: int = 0,
     ):
         self.s = settings
+        if extra_rounds < 0:
+            die("extra_rounds must be >= 0")
+        self.extra_rounds = extra_rounds
         if resume_id is not None and (
             not resume_id
             or any(
@@ -609,7 +613,6 @@ class DebateController:
         self.private_evidence = self.private_dir / "evidence_audit.jsonl"
         self.checkpoints = CheckpointStore(self.private_dir / "checkpoint.json")
 
-        self.run_dir = self.s.runs_dir / self.run_id
         self.status_file = PACKAGE_DIR / "RUN_STATUS.json"
         self.latest_file = PACKAGE_DIR / "LATEST_RUN.txt"
         self.lock_path = PACKAGE_DIR / ".debate.lock"
@@ -658,8 +661,36 @@ class DebateController:
                 "next_agent": "momus",
                 "acceptance": None,
                 "inflight": None,
+                "round_limit": self.s.max_counter_rounds,
+                "continuation_index": 0,
+                "continuations": [],
             }
             self.original_input_hashes = self._input_hashes()
+
+        self.round_limit = int(
+            self.state.get("round_limit", self.s.max_counter_rounds)
+        )
+        self.continuation_index = int(self.state.get("continuation_index", 0))
+        if self.round_limit < 1:
+            raise RuntimeError("Checkpoint round_limit must be at least 1")
+        if self.continuation_index < 0:
+            raise RuntimeError("Checkpoint continuation_index cannot be negative")
+        self.run_dir = self._archive_dir(self.continuation_index)
+
+        terminal_no_consensus = (
+            self.resuming
+            and self.state.get("phase") == "terminal"
+            and self.state.get("outcome") == "no_consensus"
+        )
+        if terminal_no_consensus and not self.extra_rounds:
+            raise RuntimeError(
+                f"Run {self.run_id} reached its round limit. Continue it with "
+                f"--resume {self.run_id} --extra-rounds N."
+            )
+        if self.extra_rounds and not terminal_no_consensus:
+            raise RuntimeError(
+                "--extra-rounds can only continue a terminal no-consensus run"
+            )
 
         restored_budget = (
             self.state.get("budget") if isinstance(self.state.get("budget"), dict) else None
@@ -751,6 +782,8 @@ class DebateController:
         self.state.update(updates)
         self.state["run_id"] = self.run_id
         self.state["sequence"] = self._sequence
+        self.state["round_limit"] = self.round_limit
+        self.state["continuation_index"] = self.continuation_index
         self.state["budget"] = self.budget.snapshot()
         self.state["input_sha256"] = self.original_input_hashes
         self.state["threads"] = {
@@ -758,6 +791,13 @@ class DebateController:
             "momus": self.momus.thread_id if self.momus else None,
         }
         self.checkpoints.save(self.state)
+
+    def _archive_dir(self, continuation_index: int) -> Path:
+        if continuation_index == 0:
+            return self.s.runs_dir / self.run_id
+        return self.s.runs_dir / (
+            f"{self.run_id}-continuation-{continuation_index}"
+        )
 
     def next_sequence(self) -> int:
         self._sequence += 1
@@ -1214,6 +1254,9 @@ substantive conclusion merely to satisfy the protocol label.
             "package": "Prometheus-Momus",
             "version": VERSION,
             "run_id": self.run_id,
+            "archive_id": self.run_dir.name,
+            "continuation_index": self.continuation_index,
+            "effective_max_counter_rounds": self.round_limit,
             "outcome": outcome,
             "started_or_updated": now_iso(),
             "project_root": str(self.s.project_root),
@@ -1267,6 +1310,11 @@ substantive conclusion merely to satisfy the protocol label.
                 ) from exc
             if existing.get("run_id") != self.run_id:
                 raise RuntimeError(f"Run directory belongs to another run: {self.run_dir}")
+            if int(existing.get("continuation_index", 0)) != self.continuation_index:
+                raise RuntimeError(
+                    "Run directory belongs to another continuation: "
+                    f"{self.run_dir}"
+                )
             self.latest_file.write_text(
                 str(self.run_dir.resolve()) + "\n",
                 encoding="utf-8",
@@ -1494,7 +1542,7 @@ Do not treat this run as consensus.
 **NO CONSENSUS WITHIN THE CONFIGURED ROUND LIMIT**
 
 - Run ID: `{self.run_id}`
-- Maximum counter-rounds: `{self.s.max_counter_rounds}`
+- Effective counter-round ceiling: `{self.round_limit}`
 - Completed counter-rounds: `{rounds}`
 - Latest candidate: `{active['candidate_id']}`
 - Latest candidate author: `{active['author']}`
@@ -1512,6 +1560,13 @@ Do not treat this run as consensus.
 ## Interpretation
 
 The round limit was reached. Do not treat the latest state as consensus.
+The persistent agent sessions were retained, so this debate can be continued
+with any positive number of additional counter-rounds:
+
+```bash
+python3 debate.py --resume {self.run_id} --extra-rounds N
+```
+
 """
         (self.private_dir / "NO_CONSENSUS.md").write_text(text, encoding="utf-8")
         (self.private_dir / "final_candidate.json").write_text(
@@ -1543,12 +1598,114 @@ The round limit was reached. Do not treat the latest state as consensus.
             if momus_thread:
                 self.momus.thread_id = str(momus_thread)
 
+    def _continue_after_round_limit(self) -> None:
+        if self.extra_rounds <= 0:
+            raise RuntimeError(
+                f"Run {self.run_id} reached its round limit. Continue it with "
+                f"--resume {self.run_id} --extra-rounds N, where N is positive."
+            )
+
+        completed_rounds = int(self.state.get("completed_rounds", 0))
+        if completed_rounds != self.round_limit:
+            raise RuntimeError(
+                "No-consensus checkpoint is inconsistent: completed rounds "
+                f"({completed_rounds}) do not match its round ceiling "
+                f"({self.round_limit})."
+            )
+        if (
+            self.prometheus is None
+            or self.momus is None
+            or not self.prometheus.thread_id
+            or not self.momus.thread_id
+        ):
+            raise RuntimeError(
+                "Cannot continue because the persistent agent thread IDs "
+                "are unavailable."
+            )
+
+        if self.s.isolation_enabled:
+            missing_homes = [
+                str(self.isolation.agent_dir(agent_name) / "codex-home")
+                for agent_name in ("prometheus", "momus")
+                if not (
+                    self.isolation.agent_dir(agent_name) / "codex-home"
+                ).is_dir()
+            ]
+            if missing_homes:
+                raise RuntimeError(
+                    "Cannot continue because private agent session storage is "
+                    "missing: " + ", ".join(missing_homes)
+                )
+
+        previous_archive = self.run_dir
+        self.continuation_index += 1
+        self.round_limit = completed_rounds + self.extra_rounds
+        self.run_dir = self._archive_dir(self.continuation_index)
+        continued_at = now_iso()
+
+        saved_continuations = self.state.get("continuations")
+        continuations = (
+            list(saved_continuations)
+            if isinstance(saved_continuations, list)
+            else []
+        )
+        continuations.append(
+            {
+                "continuation_index": self.continuation_index,
+                "continued_at": continued_at,
+                "previous_archive": str(previous_archive.resolve()),
+                "completed_rounds": completed_rounds,
+                "extra_rounds": self.extra_rounds,
+                "new_round_limit": self.round_limit,
+            }
+        )
+
+        for filename in (
+            "NO_CONSENSUS.md",
+            "final_candidate.json",
+            "run_manifest.json",
+        ):
+            (self.private_dir / filename).unlink(missing_ok=True)
+
+        self.save_checkpoint(
+            phase="debating",
+            outcome=None,
+            acceptance=None,
+            adjudication=None,
+            continuations=continuations,
+            inflight=None,
+            last_error=None,
+            resumable=True,
+        )
+        with self.private_transcript.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"\n\n# DEBATE CONTINUATION {self.continuation_index}\n\n"
+                f"- Continued: `{continued_at}`\n"
+                f"- Previous archive: `{previous_archive}`\n"
+                f"- Additional counter-rounds: `{self.extra_rounds}`\n"
+                f"- New counter-round ceiling: `{self.round_limit}`\n"
+            )
+
+        round_label = (
+            "counter-round" if self.extra_rounds == 1 else "counter-rounds"
+        )
+        print(
+            f"Continuing {self.run_id} for {self.extra_rounds} additional "
+            f"{round_label} (new ceiling: {self.round_limit})."
+        )
+
     def _print_banner(self) -> None:
-        action = "RESUMING" if self.resuming else "STARTING"
+        action = (
+            "CONTINUING"
+            if self.extra_rounds
+            else ("RESUMING" if self.resuming else "STARTING")
+        )
         print("\n" + "=" * 72)
         print(f" {action} PROMETHEUS–MOMUS DEBATE")
         print("=" * 72)
         print(f"Run ID:                  {self.run_id}")
+        print(f"Continuation:            {self.continuation_index}")
+        print(f"Counter-round ceiling:   {self.round_limit}")
         print(f"Project root:            {self.s.project_root}")
         print(f"Model override:          {self.s.model or 'inherit'}")
         print(f"Reasoning effort:        {self.s.reasoning_effort or 'inherit'}")
@@ -1773,8 +1930,9 @@ ADJUDICATION PACKET
     def _complete_publication(self) -> None:
         outcome = str(self.state.get("outcome", "unknown"))
         active = self.state.get("active")
+        resumable = outcome == "no_consensus"
         self.publish_run()
-        self.save_checkpoint(phase="terminal", inflight=None)
+        self.save_checkpoint(phase="terminal", inflight=None, resumable=resumable)
         shutil.copy2(
             self.checkpoints.path,
             self.run_dir / self.checkpoints.path.name,
@@ -1783,6 +1941,11 @@ ADJUDICATION PACKET
             state=outcome,
             stage="complete",
             run_dir=str(self.run_dir),
+            resumable=resumable,
+            continuation_command=(
+                f"python3 debate.py --resume {self.run_id} --extra-rounds N"
+                if resumable else None
+            ),
             final_candidate=(
                 active.get("candidate_id") if isinstance(active, dict) else None
             ),
@@ -1970,6 +2133,17 @@ No candidate is approved or published as consensus.
     def _cleanup_private_state(self) -> None:
         if not self.private_dir.exists():
             return
+        if self._terminal and self.state.get("outcome") == "no_consensus":
+            print(
+                f"Resumable no-consensus state retained at: {self.private_dir}",
+                file=sys.stderr,
+            )
+            print(
+                f"Continue with: python3 debate.py --resume {self.run_id} "
+                "--extra-rounds N",
+                file=sys.stderr,
+            )
+            return
         if self._terminal and not self.s.keep_private_runtime_on_success:
             shutil.rmtree(self.private_dir, ignore_errors=True)
             return
@@ -1999,13 +2173,20 @@ No candidate is approved or published as consensus.
                 )
                 self.save_checkpoint(inflight=None)
 
+            phase = str(self.state.get("phase", "new"))
+            if phase == "terminal":
+                if self.state.get("outcome") == "no_consensus":
+                    self._continue_after_round_limit()
+                    phase = "debating"
+                else:
+                    raise RuntimeError(
+                        f"Run {self.run_id} is already terminal "
+                        f"(outcome={self.state.get('outcome')!r})"
+                    )
+
             if self.s.isolation_enabled:
                 self.isolation.self_test()
             self._print_banner()
-
-            phase = str(self.state.get("phase", "new"))
-            if phase == "terminal":
-                raise RuntimeError(f"Run {self.run_id} is already terminal")
             if phase == "publishing":
                 self._complete_publication()
                 print(f"Completed interrupted publication: {self.run_dir}")
@@ -2090,7 +2271,7 @@ No candidate is approved or published as consensus.
             next_agent = str(self.state.get("next_agent", "momus"))
             current = self.prometheus if next_agent == "prometheus" else self.momus
 
-            while completed_rounds < self.s.max_counter_rounds:
+            while completed_rounds < self.round_limit:
                 role = (
                     self.prometheus_role
                     if current is self.prometheus
@@ -2232,6 +2413,8 @@ No candidate is approved or published as consensus.
             print("=" * 72)
             print(f"Run archive: {self.run_dir}")
             print(f"Report:      {self.run_dir / 'NO_CONSENSUS.md'}")
+            print(f"Continue:    python3 debate.py --resume {self.run_id} "
+                  "--extra-rounds N")
 
         except BudgetExceeded as exc:
             self._finish_budget_exhausted(exc, active)
@@ -2876,6 +3059,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--extra-rounds",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Continue a terminal no-consensus run for N additional "
+            "counter-rounds. Valid only with --resume."
+        ),
+    )
+    parser.add_argument(
         "--review-file",
         default=None,
         help="Human adjudication JSON; required with --adjudicate.",
@@ -2907,6 +3100,12 @@ def main() -> int:
 
     if args.retry_inflight and not args.resume:
         die("--retry-inflight is valid only with --resume")
+    if args.extra_rounds is not None and not args.resume:
+        die("--extra-rounds is valid only with --resume")
+    if args.extra_rounds is not None and args.extra_rounds <= 0:
+        die("--extra-rounds must be a positive integer")
+    if args.extra_rounds is not None and args.retry_inflight:
+        die("--extra-rounds and --retry-inflight cannot be used together")
     if args.adjudicate and not args.review_file:
         die("--adjudicate requires --review-file")
     if args.adjudicate and not args.reviewer:
@@ -2927,6 +3126,7 @@ def main() -> int:
             settings,
             resume_id=args.adjudicate or args.resume,
             retry_inflight=args.retry_inflight,
+            extra_rounds=args.extra_rounds or 0,
         )
         if args.adjudicate:
             controller.adjudicate(

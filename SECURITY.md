@@ -86,9 +86,11 @@ writable target so an agent cannot rewrite the program later used to resume.
 
 Agent `ACCEPT` is subject to the configured protocol and adjudication mode.
 The controller rejects acceptance with blocking issues, missing required
-evidence, or disputed evidence. Project files are resolved inside the project
-and hashed; URLs are syntax-checked. These checks prove provenance/integrity,
-not the truth of the associated claim.
+evidence, or disputed evidence in either the candidate or the accepting
+response. Acceptance and final-audit evidence is retained in the published
+candidate and included in independent review when enabled. Project files are
+resolved inside the project and hashed; URLs are syntax-checked. These checks
+prove provenance/integrity, not the truth of the associated claim.
 
 The default `none` mode performs no independent evidence verification and
 publishes agent agreement only as `CONSENSUS_UNADJUDICATED.md`. Treat that

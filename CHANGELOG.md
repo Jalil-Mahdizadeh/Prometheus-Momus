@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- revalidate decisions, minimum rounds, and acceptance evidence after every
+  protocol repair, with one repair limit per stage;
+- require the accepted candidate itself to have no blockers or disputed
+  evidence, and carry acceptance/audit evidence into publication and review;
+- finish archive checkpoints atomically before committing private terminal
+  state, and allow retained terminal runs to finish interrupted publication;
+- keep a stable run-lock file, preserve its owner record on contention, and
+  reject stale checkpoint reads before they can overwrite newer state;
+- stream raw Codex events to disk and retain/recover first-turn thread IDs
+  across interruptions and timeouts;
+- make `run.sh` and `check.sh` executable and add regression coverage for these
+  acceptance, publication, locking, and interruption paths.
+
 ## 1.4.0 — 2026-08-29
 
 Repeatable round-limit continuation:

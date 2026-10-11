@@ -42,8 +42,10 @@ Runs one more falsification turn after tentative agent acceptance.
 
 ### `max_protocol_repairs`
 
-Maximum correction calls for invalid decisions, premature acceptance, or an
-acceptance that violates the blocking-issue/evidence contract.
+Maximum correction calls per stage for invalid decisions, premature acceptance,
+or an acceptance that violates the blocking-issue/evidence contract. All rules
+are checked again after every repair; changing the kind of violation does not
+reset this limit.
 
 ### `heartbeat_seconds`
 
@@ -158,10 +160,15 @@ statement.
 
 ### `require_for_acceptance`
 
-When true, `ACCEPT` requires a non-empty evidence ledger. Disputed evidence
-always makes acceptance invalid. Project-file sources must resolve inside the
-project and are hashed. In `human` and `model` modes, every final-candidate
-source must also be independently checked by the adjudicator.
+When true, both the current candidate and its `ACCEPT` response require a
+non-empty evidence ledger. Blockers or disputed evidence in either always make
+acceptance invalid. Correcting the candidate requires a `COUNTER`; clearing
+fields only in the acceptance response is insufficient.
+
+Evidence from acceptance and the final audit is added to the candidate ledger
+without changing the candidate's proposal. Project-file sources must resolve
+inside the project and are hashed. In `human` and `model` modes, every source
+in the combined final ledger must be independently checked by the adjudicator.
 
 Use project-relative paths, optionally followed by a `#L...` location.
 
@@ -213,6 +220,9 @@ python3 debate.py --resume <run-id>
 
 Task, roles, schemas, config, and effective project/control paths must retain
 their original identities. An in-flight checkpoint refuses automatic replay.
+Raw JSONL is written during the call, so already emitted events remain available
+after interruption. Retrying recovers an emitted first-turn thread ID from that
+log if it was not yet checkpointed.
 If replay is acceptable:
 
 ```bash

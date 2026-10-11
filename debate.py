@@ -126,7 +126,7 @@ def get_thread_id(jsonl_text: str) -> str:
         except json.JSONDecodeError:
             continue
 
-        if event.get("type") == "thread.started":
+        if isinstance(event, dict) and event.get("type") == "thread.started":
             thread_id = event.get("thread_id")
             if not thread_id and isinstance(event.get("thread"), dict):
                 thread_id = event["thread"].get("id")
@@ -682,7 +682,11 @@ class DebateController:
             and self.state.get("phase") == "terminal"
             and self.state.get("outcome") == "no_consensus"
         )
-        if terminal_no_consensus and not self.extra_rounds:
+        if (
+            terminal_no_consensus
+            and not self.extra_rounds
+            and self.state.get("publication_complete")
+        ):
             raise RuntimeError(
                 f"Run {self.run_id} reached its round limit. Continue it with "
                 f"--resume {self.run_id} --extra-rounds N."
@@ -779,18 +783,19 @@ class DebateController:
                 "Task, role, schema, or configuration input changed during "
                 "the run; refusing to checkpoint mixed inputs."
             )
-        self.state.update(updates)
-        self.state["run_id"] = self.run_id
-        self.state["sequence"] = self._sequence
-        self.state["round_limit"] = self.round_limit
-        self.state["continuation_index"] = self.continuation_index
-        self.state["budget"] = self.budget.snapshot()
-        self.state["input_sha256"] = self.original_input_hashes
-        self.state["threads"] = {
+        state = {**self.state, **updates}
+        state["run_id"] = self.run_id
+        state["sequence"] = self._sequence
+        state["round_limit"] = self.round_limit
+        state["continuation_index"] = self.continuation_index
+        state["budget"] = self.budget.snapshot()
+        state["input_sha256"] = self.original_input_hashes
+        state["threads"] = {
             "prometheus": self.prometheus.thread_id if self.prometheus else None,
             "momus": self.momus.thread_id if self.momus else None,
         }
-        self.checkpoints.save(self.state)
+        self.checkpoints.save(state)
+        self.state = state
 
     def _archive_dir(self, continuation_index: int) -> Path:
         if continuation_index == 0:
@@ -804,21 +809,44 @@ class DebateController:
         return self._sequence
 
     def acquire_lock(self) -> None:
-        self._lock_handle = self.lock_path.open("w")
+        # Keep one stable inode. Truncating or unlinking before/after flock
+        # allows contenders to damage the owner record or lock different files.
+        handle = self.lock_path.open("a+")
         try:
             fcntl.flock(
-                self._lock_handle.fileno(),
+                handle.fileno(),
                 fcntl.LOCK_EX | fcntl.LOCK_NB,
             )
         except BlockingIOError:
-            self._lock_handle.close()
+            handle.close()
             die(
                 "Another debate.py process appears to be running from this "
                 "package. Concurrent runs are intentionally blocked."
             )
 
-        self._lock_handle.write(str(os.getpid()))
-        self._lock_handle.flush()
+        except BaseException:
+            handle.close()
+            raise
+        try:
+            if self.resuming:
+                latest = self.checkpoints.load()
+                metadata = {"checkpoint_version", "updated_at"}
+                if (
+                    {key: value for key, value in latest.items() if key not in metadata}
+                    != {key: value for key, value in self.state.items() if key not in metadata}
+                ):
+                    raise RuntimeError(
+                        "Checkpoint changed before the run lock was acquired; "
+                        "retry the command to load the latest state."
+                    )
+            handle.seek(0)
+            handle.truncate()
+            handle.write(str(os.getpid()))
+            handle.flush()
+        except BaseException:
+            handle.close()
+            raise
+        self._lock_handle = handle
 
     def release_lock(self) -> None:
         if not self._lock_handle:
@@ -828,10 +856,6 @@ class DebateController:
         finally:
             self._lock_handle.close()
             self._lock_handle = None
-            try:
-                self.lock_path.unlink()
-            except FileNotFoundError:
-                pass
 
     def prepare_private_runtime(self) -> None:
         self.s.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -956,6 +980,8 @@ Rules:
 8. ACCEPT means that, after actively attempting another falsification, you
    cannot justify a material improvement under the task's criteria.
 9. Blocking issues and ACCEPT are logically incompatible.
+   In a PROPOSE or COUNTER, blocking_issues describes unresolved problems in
+   your replacement candidate; put problems you fixed in critique instead.
 10. Evidence, external research, code inspection, calculations, or other
     tools should be used when the task calls for them.
 11. The debate may legitimately end in a negative recommendation if that is
@@ -965,6 +991,10 @@ Rules:
     independently verified merely because it was retrieved by this agent.
     Use project-relative paths (optionally followed by #L...) for project_file
     sources.
+13. ACCEPT approves the opponent's current candidate unchanged. If its
+    blocking issues or evidence ledger need correction, return COUNTER with
+    the complete corrected candidate. Evidence supplied with ACCEPT is added
+    to the final ledger and must also survive independent review when enabled.
 """
 
     def opening_prompt(self) -> str:
@@ -1095,11 +1125,12 @@ cosmetic objections. Return decision="COUNTER" with a complete standalone
 replacement proposal/state.
 """
 
-    def repair_accept_prompt(self, active: dict) -> str:
+    def repair_accept_prompt(self, active: dict, problems: list[str]) -> str:
         return f"""
 Your previous ACCEPT was inconsistent with the acceptance contract: it had
-blocking issues, omitted the required evidence ledger, or relied on disputed
-evidence.
+the following problems:
+
+{chr(10).join('- ' + problem for problem in problems)}
 
 Current candidate:
 
@@ -1112,6 +1143,10 @@ Either:
    disputed evidence if no material issue remains; or
 2. return COUNTER with a complete replacement proposal/state that addresses
    the material issue.
+
+If the current candidate itself has blockers, missing required evidence, or
+disputed evidence, you must return COUNTER to correct it. Clearing fields only
+in an ACCEPT does not correct the candidate being accepted.
 
 Do not lower the acceptance standard.
 """
@@ -1159,31 +1194,40 @@ If ACCEPT, blocking_issues must be empty.
         allowed: set[str],
         stage_label: str,
         active: Optional[dict] = None,
+        *,
+        completed_rounds: Optional[int] = None,
     ) -> dict:
         repairs = 0
+        effective_allowed = set(allowed)
+        if completed_rounds is not None and completed_rounds < self.s.min_counter_rounds:
+            effective_allowed.discard("ACCEPT")
 
-        while response["decision"] not in allowed:
-            if repairs >= self.s.max_protocol_repairs:
-                raise RuntimeError(
-                    f"{agent.display_name} repeatedly returned a decision "
-                    f"invalid for {stage_label}: {response['decision']!r}. "
-                    f"Allowed: {sorted(allowed)}"
+        while True:
+            problems = []
+            if (
+                response["decision"] == "ACCEPT"
+                and completed_rounds is not None
+                and completed_rounds < self.s.min_counter_rounds
+            ):
+                problems = ["ACCEPT is forbidden before the minimum counter-rounds"]
+                repair_prompt = self.forced_counter_prompt(active)
+            elif response["decision"] not in effective_allowed:
+                problems = [
+                    f"decision {response['decision']!r} is invalid; "
+                    f"allowed decisions: {sorted(effective_allowed)}"
+                ]
+                current_text = (
+                    json.dumps(active, indent=2, ensure_ascii=False)
+                    if active is not None
+                    else "(no opponent candidate is active in this stage)"
                 )
-
-            repairs += 1
-            current_text = (
-                json.dumps(active, indent=2, ensure_ascii=False)
-                if active is not None
-                else "(no opponent candidate is active in this stage)"
-            )
-
-            repair_prompt = f"""
+                repair_prompt = f"""
 Your previous structured response used decision={response['decision']!r},
 which is not valid for the current protocol stage: {stage_label}.
 
 Allowed decisions for this stage are:
 
-{sorted(allowed)}
+{sorted(effective_allowed)}
 
 Current candidate/context:
 
@@ -1193,57 +1237,51 @@ Keep the substantive analysis if it remains valid, but return a fresh complete
 structured response using one of the allowed decisions. Do not change the
 substantive conclusion merely to satisfy the protocol label.
 """
+            elif response["decision"] == "ACCEPT":
+                if active is None:
+                    raise RuntimeError("ACCEPT requires an active candidate")
+                problems = self.acceptance_problems(active, response)
+                repair_prompt = self.repair_accept_prompt(active, problems)
 
+            if not problems:
+                return response
+            if repairs >= self.s.max_protocol_repairs:
+                raise RuntimeError(
+                    f"{agent.display_name} exhausted protocol repairs for "
+                    f"{stage_label}: {'; '.join(problems)}"
+                )
+
+            repairs += 1
             response = agent.run(
                 repair_prompt,
-                stage=f"{slugify(stage_label)}_decision_repair_{repairs}",
+                stage=f"{slugify(stage_label)}_protocol_repair_{repairs}",
             )
 
-        return response
-
-    def enforce_premature_acceptance(
-        self, agent: "Agent", response: dict, active: dict, stage_prefix: str
-    ) -> dict:
-        repairs = 0
-        while response["decision"] == "ACCEPT":
-            if repairs >= self.s.max_protocol_repairs:
-                raise RuntimeError(
-                    f"{agent.display_name} repeatedly attempted premature ACCEPT."
-                )
-            repairs += 1
-            response = agent.run(
-                self.forced_counter_prompt(active),
-                stage=f"{stage_prefix}_premature_accept_repair_{repairs}",
-            )
-        return response
-
-    def enforce_accept_consistency(
-        self, agent: "Agent", response: dict, active: dict, stage_prefix: str
-    ) -> dict:
-        repairs = 0
-        def inconsistent(value: dict) -> bool:
-            if value["decision"] != "ACCEPT":
-                return False
+    def acceptance_problems(self, active: dict, response: dict) -> list[str]:
+        problems = []
+        for label, value in (("Current candidate", active), ("ACCEPT response", response)):
             if value["blocking_issues"]:
-                return True
+                problems.append(f"{label} has blocking issues")
             if self.s.require_evidence_for_acceptance and not value["evidence"]:
-                return True
-            return any(
-                item.get("status") == "disputed" for item in value["evidence"]
-            )
+                problems.append(f"{label} is missing required evidence")
+            if any(item["status"] == "disputed" for item in value["evidence"]):
+                problems.append(f"{label} has disputed evidence")
+        return problems
 
-        while inconsistent(response):
-            if repairs >= self.s.max_protocol_repairs:
-                raise RuntimeError(
-                    f"{agent.display_name} repeatedly returned an ACCEPT that "
-                    "violated the blocking-issue/evidence contract."
-                )
-            repairs += 1
-            response = agent.run(
-                self.repair_accept_prompt(active),
-                stage=f"{stage_prefix}_accept_consistency_repair_{repairs}",
-            )
-        return response
+    def accepted_candidate(self, active: dict, response: dict, rounds: int) -> dict:
+        """Validate acceptance and retain evidence from both agents for review."""
+        if response["decision"] != "ACCEPT":
+            raise RuntimeError("Finalization requires an ACCEPT response")
+        if rounds < self.s.min_counter_rounds:
+            raise RuntimeError("Cannot accept before the minimum counter-rounds")
+        problems = self.acceptance_problems(active, response)
+        if problems:
+            raise RuntimeError("Cannot accept candidate: " + "; ".join(problems))
+        evidence = list(active["evidence"])
+        for item in response["evidence"]:
+            if item not in evidence:
+                evidence.append(item)
+        return {**active, "evidence": evidence}
 
     # ------------------------------------------------------------------
     # Publication
@@ -1598,6 +1636,24 @@ python3 debate.py --resume {self.run_id} --extra-rounds N
             if momus_thread:
                 self.momus.thread_id = str(momus_thread)
 
+    def _recover_inflight_thread(self) -> None:
+        """Recover a first-turn ID even if SIGKILL prevented checkpointing it."""
+        inflight = self.state.get("inflight")
+        if not isinstance(inflight, dict):
+            return
+        agent = {
+            "prometheus": self.prometheus,
+            "momus": self.momus,
+        }.get(inflight.get("agent"))
+        if agent is None or agent.thread_id is not None:
+            return
+        raw_log = self.private_raw / (
+            f"{int(inflight['sequence']):03d}_{agent.machine_name}_"
+            f"{slugify(str(inflight['stage']))}.jsonl"
+        )
+        if raw_log.is_file():
+            agent.remember_thread(raw_log.read_text(encoding="utf-8", errors="replace"))
+
     def _continue_after_round_limit(self) -> None:
         if self.extra_rounds <= 0:
             raise RuntimeError(
@@ -1670,6 +1726,7 @@ python3 debate.py --resume {self.run_id} --extra-rounds N
         self.save_checkpoint(
             phase="debating",
             outcome=None,
+            publication_complete=False,
             acceptance=None,
             adjudication=None,
             continuations=continuations,
@@ -1839,6 +1896,11 @@ ADJUDICATION PACKET
         acceptance = self.state.get("acceptance")
         if not isinstance(active, dict) or not isinstance(acceptance, dict):
             raise RuntimeError("Pending-adjudication checkpoint is incomplete")
+        active = self.accepted_candidate(
+            active, acceptance["response"], int(acceptance["rounds"])
+        )
+        if active != self.state["active"]:
+            self.save_checkpoint(active=active)
 
         if self.s.adjudication_mode == "none":
             self._finalize_unadjudicated_consensus(active, acceptance)
@@ -1903,6 +1965,7 @@ ADJUDICATION PACKET
         if not isinstance(response, dict):
             raise RuntimeError("Acceptance response is unavailable")
         rounds = int(acceptance.get("rounds", 0))
+        active = self.accepted_candidate(active, response, rounds)
 
         outcome = "consensus_unadjudicated"
         self.write_unadjudicated_consensus(
@@ -1931,12 +1994,51 @@ ADJUDICATION PACKET
         outcome = str(self.state.get("outcome", "unknown"))
         active = self.state.get("active")
         resumable = outcome == "no_consensus"
+        if outcome in {"consensus", "consensus_unadjudicated"}:
+            acceptance = self.state.get("acceptance")
+            if not isinstance(active, dict) or not isinstance(acceptance, dict):
+                raise RuntimeError("Consensus publication has no candidate or acceptance")
+            checked = self.accepted_candidate(
+                active, acceptance["response"], int(acceptance["rounds"])
+            )
+            if checked != active:
+                raise RuntimeError(
+                    "Publication checkpoint omits acceptance evidence; "
+                    "refusing to publish an incomplete candidate ledger."
+                )
+            if outcome == "consensus":
+                review = self.state.get("adjudication")
+                if not isinstance(review, dict):
+                    raise RuntimeError("Consensus publication has no adjudication")
+                validate_adjudication(
+                    {key: review.get(key) for key in (
+                        "decision", "rationale", "blocking_issues", "evidence_checks"
+                    )},
+                    required_sources=required_independent_sources(active["evidence"]),
+                )
+                if review["decision"] != "APPROVE":
+                    raise RuntimeError("Consensus publication requires independent approval")
         self.publish_run()
-        self.save_checkpoint(phase="terminal", inflight=None, resumable=resumable)
-        shutil.copy2(
-            self.checkpoints.path,
-            self.run_dir / self.checkpoints.path.name,
-        )
+        terminal = {
+            **self.state,
+            "phase": "terminal",
+            "inflight": None,
+            "resumable": resumable,
+            "publication_complete": True,
+            "budget": self.budget.snapshot(),
+        }
+        archived_store = CheckpointStore(self.run_dir / self.checkpoints.path.name)
+        try:
+            archived = archived_store.load()
+        except RuntimeError:
+            archived = {}
+        # A completed archive is immutable, including when a later status or
+        # private-checkpoint write must be retried after a crash.
+        if not all(
+            archived.get(key) == terminal.get(key)
+            for key in ("run_id", "continuation_index", "outcome", "phase")
+        ):
+            archived_store.save(terminal)
         self.write_status(
             state=outcome,
             stage="complete",
@@ -1949,6 +2051,12 @@ ADJUDICATION PACKET
             final_candidate=(
                 active.get("candidate_id") if isinstance(active, dict) else None
             ),
+        )
+        # Commit terminal only after the archive and public status are complete.
+        # A retained terminal checkpoint is also safe to finalize again.
+        self.save_checkpoint(
+            phase="terminal", inflight=None, resumable=resumable,
+            publication_complete=True,
         )
         self._terminal = True
 
@@ -1971,6 +2079,10 @@ ADJUDICATION PACKET
         if not isinstance(response, dict):
             raise RuntimeError("Acceptance response is unavailable")
         rounds = int(acceptance.get("rounds", 0))
+        active = self.accepted_candidate(active, response, rounds)
+        review = validate_adjudication(
+            review, required_sources=required_independent_sources(active["evidence"])
+        )
 
         adjudication_record = {
             "reviewer": reviewer,
@@ -2046,6 +2158,14 @@ ADJUDICATION PACKET
             active = self.state.get("active")
             if not isinstance(active, dict):
                 raise RuntimeError("Checkpoint has no active candidate")
+            acceptance = self.state.get("acceptance")
+            if not isinstance(acceptance, dict):
+                raise RuntimeError("Checkpoint has no acceptance response")
+            active = self.accepted_candidate(
+                active, acceptance["response"], int(acceptance["rounds"])
+            )
+            if active != self.state["active"]:
+                self.save_checkpoint(active=active)
             review = validate_adjudication(
                 raw_review,
                 required_sources=required_independent_sources(
@@ -2057,7 +2177,7 @@ ADJUDICATION PACKET
                 reviewer=f"human:{reviewer}",
             )
         except BaseException as exc:
-            if self.private_dir.exists():
+            if self.private_dir.exists() and not self._terminal:
                 try:
                     with (self.private_dir / "ERROR.txt").open(
                         "a", encoding="utf-8"
@@ -2081,8 +2201,10 @@ ADJUDICATION PACKET
                     )
             raise
         finally:
-            self.release_lock()
-            self._cleanup_private_state()
+            try:
+                self._cleanup_private_state()
+            finally:
+                self.release_lock()
 
     def _finish_budget_exhausted(
         self,
@@ -2166,6 +2288,7 @@ No candidate is approved or published as consensus.
 
             self._restore_agents()
             if self.state.get("inflight"):
+                self._recover_inflight_thread()
                 print(
                     "WARNING: explicitly retrying a previously interrupted "
                     "model-call stage; the persistent thread may replay it.",
@@ -2175,22 +2298,22 @@ No candidate is approved or published as consensus.
 
             phase = str(self.state.get("phase", "new"))
             if phase == "terminal":
-                if self.state.get("outcome") == "no_consensus":
+                self._complete_publication()
+                if self.state.get("outcome") == "no_consensus" and self.extra_rounds:
+                    self._terminal = False
                     self._continue_after_round_limit()
                     phase = "debating"
                 else:
-                    raise RuntimeError(
-                        f"Run {self.run_id} is already terminal "
-                        f"(outcome={self.state.get('outcome')!r})"
-                    )
+                    print(f"Completed publication: {self.run_dir}")
+                    return
 
-            if self.s.isolation_enabled:
-                self.isolation.self_test()
-            self._print_banner()
             if phase == "publishing":
                 self._complete_publication()
                 print(f"Completed interrupted publication: {self.run_dir}")
                 return
+            if self.s.isolation_enabled:
+                self.isolation.self_test()
+            self._print_banner()
             if phase == "pending_adjudication":
                 self._continue_pending_adjudication()
                 return
@@ -2287,32 +2410,11 @@ No candidate is approved or published as consensus.
                     {"COUNTER", "ACCEPT"},
                     f"counter-round {completed_rounds + 1}",
                     active,
-                )
-                if (
-                    response["decision"] == "ACCEPT"
-                    and completed_rounds < self.s.min_counter_rounds
-                ):
-                    response = self.enforce_premature_acceptance(
-                        current,
-                        response,
-                        active,
-                        f"counter_round_{completed_rounds + 1}",
-                    )
-                    response = self.enforce_allowed_decision(
-                        current,
-                        response,
-                        {"COUNTER", "ACCEPT"},
-                        "counter-round after premature-accept repair",
-                        active,
-                    )
-                response = self.enforce_accept_consistency(
-                    current,
-                    response,
-                    active,
-                    f"counter_round_{completed_rounds + 1}",
+                    completed_rounds=completed_rounds,
                 )
 
                 if response["decision"] == "ACCEPT" and self.s.final_acceptance_audit:
+                    active = self.accepted_candidate(active, response, completed_rounds)
                     print(
                         f"\n{current.display_name} tentatively accepted "
                         f"{active['candidate_id']}; running final audit..."
@@ -2329,15 +2431,11 @@ No candidate is approved or published as consensus.
                         {"COUNTER", "ACCEPT"},
                         "final acceptance audit",
                         active,
-                    )
-                    response = self.enforce_accept_consistency(
-                        current,
-                        response,
-                        active,
-                        "final_acceptance_audit",
+                        completed_rounds=completed_rounds,
                     )
 
                 if response["decision"] == "ACCEPT":
+                    active = self.accepted_candidate(active, response, completed_rounds)
                     self.append_history(
                         "tentative_acceptance",
                         current,
@@ -2419,7 +2517,7 @@ No candidate is approved or published as consensus.
         except BudgetExceeded as exc:
             self._finish_budget_exhausted(exc, active)
         except BaseException as exc:
-            if self.private_dir.exists():
+            if self.private_dir.exists() and not self._terminal:
                 try:
                     with (self.private_dir / "ERROR.txt").open(
                         "a", encoding="utf-8"
@@ -2447,8 +2545,10 @@ No candidate is approved or published as consensus.
                 )
             raise
         finally:
-            self.release_lock()
-            self._cleanup_private_state()
+            try:
+                self._cleanup_private_state()
+            finally:
+                self.release_lock()
 
 # ---------------------------------------------------------------------------
 # Codex agent
@@ -2472,6 +2572,19 @@ class Agent:
         self.model_override = model_override
         self.reasoning_override = reasoning_override
         self.sandbox_override = sandbox_override
+
+    def remember_thread(self, jsonl_text: str, *, required: bool = False) -> None:
+        if self.thread_id is not None:
+            return
+        try:
+            thread_id = get_thread_id(jsonl_text)
+        except RuntimeError:
+            if required:
+                raise
+            return
+        self.thread_id = thread_id
+        self.c.save_checkpoint()
+        print(f"{self.display_name} persistent thread: {thread_id}", flush=True)
 
     def build_command(
         self, outfile: Path, schema_file: Path
@@ -2598,32 +2711,6 @@ class Agent:
             agent=self.display_name,
         )
 
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=None,
-            text=True,
-            start_new_session=True,
-            env=environment,
-        )
-
-        holder: dict[str, object] = {}
-
-        def communicate_worker() -> None:
-            try:
-                stdout_text, _ = proc.communicate(input=prompt)
-                holder["stdout"] = stdout_text
-            except BaseException as exc:
-                holder["error"] = exc
-
-        worker = threading.Thread(
-            target=communicate_worker,
-            name=f"{self.machine_name}-codex-communicate",
-            daemon=True,
-        )
-        worker.start()
-
         started = time.monotonic()
         timeout_seconds = (
             self.c.s.turn_timeout_minutes * 60
@@ -2631,79 +2718,106 @@ class Agent:
             else None
         )
 
-        try:
-            while worker.is_alive():
-                elapsed_before_wait = time.monotonic() - started
-                remaining_wall = self.c.budget.remaining_wall_seconds()
-                if remaining_wall is not None and remaining_wall <= 0:
-                    self._terminate_process_group(proc)
-                    raise BudgetExceeded(
-                        f"{self.display_name} exceeded the total wall-time budget."
-                    )
-                remaining_turn = (
-                    timeout_seconds - elapsed_before_wait
-                    if timeout_seconds is not None
-                    else None
-                )
-                if remaining_turn is not None and remaining_turn <= 0:
-                    self._terminate_process_group(proc)
+        # Let the child write directly to disk. A pipe drained by communicate()
+        # would retain all events in memory and lose them on interruption.
+        with raw_log.open("wb") as raw_handle:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=raw_handle,
+                stderr=None,
+                text=True,
+                start_new_session=True,
+                env=environment,
+            )
+            holder: dict[str, object] = {}
+
+            def communicate_worker() -> None:
+                try:
+                    proc.communicate(input=prompt)
+                except BaseException as exc:
+                    holder["error"] = exc
+
+            worker = threading.Thread(
+                target=communicate_worker,
+                name=f"{self.machine_name}-codex-communicate",
+                daemon=True,
+            )
+            next_heartbeat = started + self.c.s.heartbeat_seconds
+            try:
+                worker.start()
+                with raw_log.open("r", encoding="utf-8", errors="replace") as events:
+                    pending = ""
+                    while True:
+                        if self.thread_id is None:
+                            pending += events.read()
+                            lines = pending.split("\n")
+                            pending = lines.pop()
+                            self.remember_thread("\n".join(lines))
+
+                        elapsed = time.monotonic() - started
+                        remaining_wall = self.c.budget.remaining_wall_seconds()
+                        if remaining_wall is not None and remaining_wall <= 0:
+                            raise BudgetExceeded(
+                                f"{self.display_name} exceeded the total wall-time budget."
+                            )
+                        remaining_turn = (
+                            timeout_seconds - elapsed
+                            if timeout_seconds is not None else None
+                        )
+                        if remaining_turn is not None and remaining_turn <= 0:
+                            raise RuntimeError(
+                                f"{self.display_name} turn timed out after "
+                                f"{self.c.s.turn_timeout_minutes} minutes."
+                            )
+                        if not worker.is_alive():
+                            break
+                        if time.monotonic() >= next_heartbeat:
+                            minutes, seconds = divmod(int(elapsed), 60)
+                            print(
+                                f"[{self.display_name}] still running — "
+                                f"elapsed {minutes:02d}:{seconds:02d}",
+                                flush=True,
+                            )
+                            next_heartbeat = time.monotonic() + self.c.s.heartbeat_seconds
+                        wait_seconds = min(1.0, max(next_heartbeat - time.monotonic(), 0.01))
+                        for remaining in (remaining_wall, remaining_turn):
+                            if remaining is not None:
+                                wait_seconds = min(wait_seconds, remaining)
+                        worker.join(timeout=max(wait_seconds, 0.01))
+                if "error" in holder:
                     raise RuntimeError(
-                        f"{self.display_name} turn timed out after "
-                        f"{self.c.s.turn_timeout_minutes} minutes."
+                        f"Subprocess communication failed for {self.display_name}: "
+                        f"{holder['error']}"
                     )
-                wait_seconds = float(self.c.s.heartbeat_seconds)
-                if remaining_wall is not None:
-                    wait_seconds = min(wait_seconds, remaining_wall)
-                if remaining_turn is not None:
-                    wait_seconds = min(wait_seconds, remaining_turn)
-                worker.join(timeout=max(wait_seconds, 0.01))
-
-                elapsed = int(time.monotonic() - started)
-
-                if timeout_seconds is not None and elapsed >= timeout_seconds:
+            except BaseException:
+                self._terminate_process_group(proc)
+                if worker.ident is not None:
+                    worker.join(timeout=10)
+                try:
+                    partial = raw_log.read_text(encoding="utf-8", errors="replace")
+                    self.remember_thread(partial)
+                    usage = parse_codex_usage(partial)
+                    if usage is not None:
+                        try:
+                            self.c.budget.record_usage(usage)
+                        except BudgetExceeded:
+                            # Keep the original interruption; updated usage is
+                            # checkpointed and still enforced on the next call.
+                            pass
+                    self.c.save_checkpoint()
+                except Exception as checkpoint_exc:
                     print(
-                        f"\n{self.display_name} exceeded the configured "
-                        f"{self.c.s.turn_timeout_minutes}-minute turn timeout.",
+                        f"Warning: could not checkpoint interrupted call: {checkpoint_exc}",
                         file=sys.stderr,
                     )
-                    self._terminate_process_group(proc)
-                    raise RuntimeError(
-                        f"{self.display_name} turn timed out after "
-                        f"{self.c.s.turn_timeout_minutes} minutes."
-                    )
+                raise
+            finally:
+                raw_handle.flush()
+                os.fsync(raw_handle.fileno())
 
-                remaining_wall = self.c.budget.remaining_wall_seconds()
-                if remaining_wall is not None and remaining_wall <= 0:
-                    self._terminate_process_group(proc)
-                    raise BudgetExceeded(
-                        f"{self.display_name} exceeded the total wall-time budget."
-                    )
-
-                if worker.is_alive():
-                    minutes, seconds = divmod(elapsed, 60)
-                    print(
-                        f"[{self.display_name}] still running — "
-                        f"elapsed {minutes:02d}:{seconds:02d}",
-                        flush=True,
-                    )
-
-        except KeyboardInterrupt:
-            print(
-                f"\nInterrupt received; terminating {self.display_name}...",
-                file=sys.stderr,
-            )
-            self._terminate_process_group(proc)
-            raise
-
-        if "error" in holder:
-            self._terminate_process_group(proc)
-            raise RuntimeError(
-                f"Subprocess communication failed for {self.display_name}: "
-                f"{holder['error']}"
-            )
-
-        stdout_text = str(holder.get("stdout", ""))
-        raw_log.write_text(stdout_text, encoding="utf-8")
+        stdout_text = raw_log.read_text(encoding="utf-8", errors="replace")
+        self.remember_thread(stdout_text)
 
         usage = parse_codex_usage(stdout_text)
         if proc.returncode != 0:
@@ -2720,13 +2834,7 @@ class Agent:
         finally:
             self.c.save_checkpoint()
 
-        if self.thread_id is None:
-            self.thread_id = get_thread_id(stdout_text)
-            self.c.save_checkpoint()
-            print(
-                f"{self.display_name} persistent thread: {self.thread_id}",
-                flush=True,
-            )
+        self.remember_thread(stdout_text, required=True)
 
         if not outfile.exists():
             raise RuntimeError(
@@ -2783,10 +2891,13 @@ class Agent:
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            pass
+        # Also stop descendants that outlived the process-group leader.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait(timeout=10)
 
 
 # ---------------------------------------------------------------------------

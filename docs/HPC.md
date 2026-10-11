@@ -82,7 +82,9 @@ python3 debate.py --resume <run-id>
 The controller converts `SIGTERM` into a graceful interruption, terminates
 the active Codex process group, and preserves the already-written in-flight
 checkpoint. Scheduler-level `SIGKILL` cannot run cleanup, but the pre-call
-checkpoint still remains.
+checkpoint and already emitted raw JSONL events still remain. A first-turn
+thread ID that reached the log can be recovered during explicit retry even if
+it was not yet saved in the checkpoint.
 
 If Slurm terminated the job during a Codex call, the checkpoint remains
 `inflight`. Inspect the last prompt/raw JSONL and acknowledge possible

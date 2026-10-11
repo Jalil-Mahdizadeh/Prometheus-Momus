@@ -250,6 +250,8 @@ The controller provides several protocol safeguards:
 - premature-acceptance repair;
 - rejection of `ACCEPT` with blocking issues;
 - rejection of `ACCEPT` with missing or disputed evidence;
+- equivalent checks on the candidate being accepted, with acceptance/audit
+  evidence retained in the final ledger;
 - configurable final acceptance audit;
 - hard maximum counter-round limit;
 - explicit unadjudicated output, or opt-in independent human or
@@ -348,6 +350,11 @@ python3 debate.py --resume <run-id> --retry-inflight
 
 Input hashes and effective project/control paths must still match the original
 task, roles, schemas, and config.
+
+Raw Codex events are written during each call. An explicit retry can recover a
+first-turn thread ID from that log if interruption prevented checkpointing it.
+Interrupted publication can also be completed with `--resume`, including a
+retained terminal checkpoint; this does not make another model call.
 
 ### Continue after the round ceiling
 

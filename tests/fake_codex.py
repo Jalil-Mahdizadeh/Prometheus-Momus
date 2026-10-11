@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 
@@ -57,6 +58,13 @@ def main() -> int:
     counter_file = Path(os.environ["FAKE_CODEX_COUNTER"])
     count = int(counter_file.read_text(encoding="utf-8") or "0") + 1
     counter_file.write_text(str(count), encoding="utf-8")
+    script_path = os.environ.get("FAKE_CODEX_SCRIPT")
+    script = json.loads(Path(script_path).read_text()) if script_path else []
+    step = script[count - 1] if count <= len(script) else {}
+    call_log = os.environ.get("FAKE_CODEX_CALL_LOG")
+    if call_log:
+        with Path(call_log).open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"args": args, "prompt": prompt}) + "\n")
 
     event = {
         "type": "turn.completed",
@@ -70,9 +78,18 @@ def main() -> int:
         print(
             json.dumps(
                 {"type": "thread.started", "thread_id": f"fake-thread-{count}"}
-            )
+            ),
+            flush=True,
         )
-    print(json.dumps(event))
+    if step.get("sleep"):
+        print(json.dumps({"type": "item.started", "message": "partial progress"}), flush=True)
+        ready = os.environ.get("FAKE_CODEX_READY")
+        if ready:
+            Path(ready).write_text(str(os.getpid()), encoding="utf-8")
+        time.sleep(step["sleep"])
+    print(json.dumps(event), flush=True)
+    if step.get("exit_code"):
+        return step["exit_code"]
 
     fail_marker = os.environ.get("FAKE_CODEX_FAIL_MARKER")
     if (
@@ -86,8 +103,10 @@ def main() -> int:
     output_index = args.index("--output-last-message") + 1
     output_file = Path(args[output_index])
     output_file.parent.mkdir(parents=True, exist_ok=True)
+    response = step.get("response", response_for(prompt))
+    response.update(step.get("overrides", {}))
     output_file.write_text(
-        json.dumps(response_for(prompt)),
+        json.dumps(response),
         encoding="utf-8",
     )
     return 0

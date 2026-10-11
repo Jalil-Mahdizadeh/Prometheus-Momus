@@ -86,6 +86,17 @@ the configured private-runtime cleanup policy.
 types, allowed decisions, non-empty proposal/rationale fields, and evidence
 entries.
 
+Every repair response passes the same stage, minimum-round, and acceptance
+checks as the original response. One correction-call limit applies to each
+stage, including when successive responses violate different rules.
+
+Acceptance requires both the current candidate and the accepting response to
+have no blockers or disputed evidence, and both must contain evidence when it
+is required. A candidate needing correction must receive a `COUNTER`.
+Acceptance preserves the candidate's proposal and author while adding evidence
+from the accepting response. A final audit also sees and retains that added
+evidence. Publication and adjudication use this combined ledger.
+
 Evidence audit behavior:
 
 - project paths are confined to the project and hashed;
@@ -130,6 +141,12 @@ writes an `inflight` record. A successful protocol transition clears it.
 After interruption, replay is never automatic because the persistent thread
 may have advanced.
 
+Codex stdout streams directly into the private raw JSONL file during a call.
+Observed first-turn thread IDs are checkpointed while the call is active and
+on graceful interruption. If an unclean exit prevented that checkpoint, an
+explicit `--retry-inflight` recovers an emitted ID from the retained raw log
+before replaying the phase. Events not yet emitted by Codex cannot be recovered.
+
 Input hashes prevent resuming with changed task, role, schema, or config.
 Token/cost/wall/call usage is restored from the checkpoint.
 
@@ -142,6 +159,20 @@ them to a hidden staging directory and atomically renames it to
 without rewriting it. Each continuation archive contains the cumulative
 transcript and logs. A `publishing` checkpoint makes each publication
 idempotently resumable.
+
+The archived terminal checkpoint is replaced atomically, then public status is
+written, and only then does private state commit `terminal`. Retained terminal
+state can also finish publication through `--resume`, including checkpoints
+left by older versions that committed terminal too early. Retrying publication
+does not launch a model or rewrite an already completed archive. Continuing a
+round-limit run still requires `--extra-rounds` after publication is complete.
+Saved consensus candidates are revalidated on resume; an older checkpoint that
+violates acceptance or omits required review evidence is refused.
+
+The package lock uses a persistent file so all contenders lock the same inode.
+Only the lock holder writes its owner record, and cleanup runs before unlocking.
+A resumer whose checkpoint changed before acquiring the lock must retry with
+the latest state.
 
 - round limit: `NO_CONSENSUS.md`;
 - hard budget: `BUDGET_EXHAUSTED.md`;

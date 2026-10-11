@@ -8,7 +8,7 @@ containing the file.
 optional.
 
 The bundled profile is intentionally portable and autonomous: it uses the
-harness directory as `project_root`, runs `gpt-5.6-sol` at `max` effort with
+harness directory as `project_root`, runs `gpt-6-astra` at `max` effort with
 live web search, keeps agents read-only, allows 4–10 counter-rounds, and
 publishes agreement without independent adjudication. Model-call, wall-time,
 token, and estimated-cost ceilings default to unlimited. This keeps the

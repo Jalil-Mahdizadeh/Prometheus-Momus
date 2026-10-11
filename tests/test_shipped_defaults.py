@@ -11,7 +11,7 @@ class ShippedDefaultsTest(unittest.TestCase):
         repository = Path(__file__).resolve().parents[1]
         settings = debate.load_settings(repository / "config.ini", None)
 
-        self.assertEqual(settings.model, "gpt-5.6-sol")
+        self.assertEqual(settings.model, "gpt-6-astra")
         self.assertEqual(settings.reasoning_effort, "max")
         self.assertEqual(settings.web_search, "live")
         self.assertEqual(settings.min_counter_rounds, 4)

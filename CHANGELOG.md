@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- switch both debate agents to `gpt-6-astra` at `max` reasoning effort;
 - revalidate decisions, minimum rounds, and acceptance evidence after every
   protocol repair, with one repair limit per stage;
 - require the accepted candidate itself to have no blockers or disputed
